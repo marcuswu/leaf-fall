@@ -453,7 +453,7 @@
     "pinned_symbol_libs": []
   },
   "meta": {
-    "filename": "3leaf_left.kicad_pro",
+    "filename": "3leaf_fall.kicad_pro",
     "version": 3
   },
   "net_settings": {
@@ -489,10 +489,10 @@
       "gencad": "",
       "idf": "",
       "netlist": "",
-      "plot": "C:/Users/mwu/src/keyboards/leaf_fold3/PCB/left/3leaf_left-backups/",
+      "plot": "gerber/",
       "pos_files": "",
       "specctra_dsn": "",
-      "step": "3leaf_left.stl",
+      "step": "3leaf_fall.step",
       "svg": "",
       "vrml": ""
     },
@@ -550,12 +550,30 @@
           "label": "DNP",
           "name": "${DNP}",
           "show": true
+        },
+        {
+          "group_by": false,
+          "label": "#",
+          "name": "${ITEM_NUMBER}",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "MANUFACTURER",
+          "name": "MANUFACTURER",
+          "show": false
+        },
+        {
+          "group_by": false,
+          "label": "Description",
+          "name": "Description",
+          "show": false
         }
       ],
       "filter_string": "",
       "group_symbols": true,
       "include_excluded_from_bom": false,
-      "name": "Grouped By Value",
+      "name": "",
       "sort_asc": true,
       "sort_field": "Reference"
     },
