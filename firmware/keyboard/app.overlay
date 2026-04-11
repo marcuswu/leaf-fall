@@ -1,0 +1,120 @@
+
+/ {
+    aliases {
+        sw0 = &button0;
+        sw1 = &button1;
+        sw2 = &button2;
+        sw3 = &button3;
+        sw4 = &button4;
+        sw5 = &button5;
+        sw6 = &button6;
+        sw7 = &button7;
+        sw8 = &button8;
+        sw9 = &button9;
+        sw10 = &button10;
+        sw11 = &button11;
+        sw12 = &button12;
+        sw13 = &button13;
+        sw14 = &button14;
+        sw15 = &button15;
+        sw16 = &button16;
+        sw17 = &button17;
+        sw18 = &button18;
+        sw19 = &button19;
+        sw20 = &button20;
+        sw21 = &button21;
+    };
+
+    buttons {
+        compatible = "gpio-keys";
+
+        button0: button_0 {
+            gpios = <&gpio0 30 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 0";
+        };
+        button1: button_1 {
+            gpios = <&gpio0 29 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 1";
+        };
+        button2: button_2 {
+            gpios = <&gpio0 28 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 2";
+        };
+        button3: button_3 {
+            gpios = <&gpio0 27 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 3";
+        };
+        button4: button_4 {
+            gpios = <&gpio0 26 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 0";
+        };
+        button5: button_5 {
+            gpios = <&gpio0 25 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 5";
+        };
+        button6: button_6 {
+            gpios = <&gpio0 1 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 6";
+        };
+        button7: button_7 {
+            gpios = <&gpio0 0 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 7";
+        };
+        button8: button_8 {
+            gpios = <&gpio0 31 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 8";
+        };
+        button9: button_9 {
+            gpios = <&gpio0 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 9";
+        };
+        button10: button_10 {
+            gpios = <&gpio0 3 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 10";
+        };
+        button11: button_11 {
+            gpios = <&gpio0 4 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 11";
+        };
+        button12: button_12 {
+            gpios = <&gpio0 10 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 12";
+        };
+        button13: button_13 {
+            gpios = <&gpio0 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 13";
+        };
+        button14: button_14 {
+            gpios = <&gpio0 8 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 14";
+        };
+        button15: button_15 {
+            gpios = <&gpio0 7 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 15";
+        };
+        button16: button_16 {
+            gpios = <&gpio0 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 16";
+        };
+        button17: button_17 {
+            gpios = <&gpio0 5 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 17";
+        };
+        button18: button_18 {
+            gpios = <&gpio0 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 18";
+        };
+        button19: button_19 {
+            gpios = <&gpio0 12 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 19";
+        };
+        button20: button_20 {
+            gpios = <&gpio0 13 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 20";
+        };
+        button21: button_21 {
+            gpios = <&gpio0 14 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            label = "Button 21";
+        };
+    };
+};

@@ -36,7 +36,14 @@ fp-info-cache
 # Archived Backups (KiCad 6.0)
 **/*.zip
 
+# Kicad local history
+**/.history
+
 # Local project settings
 *.kicad_prl
 
 TODO
+
+# firmware build directories
+firmware/**/build
+
