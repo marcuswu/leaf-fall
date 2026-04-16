@@ -1,24 +1,33 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/irq.h>
 #include <zephyr/logging/log.h>
 #include <string.h>
 
+#include <nrfx_power.h>
 #include <nrf_gzll.h>
 #include <gzll_glue.h>
 
 LOG_MODULE_REGISTER(app, LOG_LEVEL_INF); // Use INF for RTT logs
 
-/* Pipe 0 is used for the LEFT half. */
+/* Pipe number based on keyboard side */
+#ifdef KEYBOARD_RIGHT
+#define PIPE_NUMBER 1
+#else
 #define PIPE_NUMBER 0
+#endif
 
 /* Polling and debounce delay in milliseconds */
 #define POLLING_INTERVAL_MS 50
 
 /* Define the number of buttons we are polling. */
+
 #define NUM_BUTTONS 22
 
+#define HALF_NUM_BITS NUM_BUTTONS + 1 // Total bits needed (22 buttons + 1 power alert bit)
+
 /* The payload length is the full array of buttons. */
-#define TX_PAYLOAD_LENGTH (NUM_BUTTONS + 7) / 8 // Number of bytes needed to represent NUM_BUTTONS bits
+#define TX_PAYLOAD_LENGTH (HALF_NUM_BITS + 7) / 8 // Number of bytes needed to represent NUM_BUTTONS bits
 
 /* Maximum number of transmission attempts */
 #define MAX_TX_ATTEMPTS 100
@@ -26,6 +35,10 @@ LOG_MODULE_REGISTER(app, LOG_LEVEL_INF); // Use INF for RTT logs
 /* --- NEW: Power Saving --- */
 #define INACTIVITY_TIMEOUT_MEDIUM_MS (15 * 1000) // 15 seconds
 #define INACTIVITY_TIMEOUT_SLEEP_MS  (30 * 1000) // 30 seconds
+
+/* CR2032 low-power threshold and alert state */
+#define LOW_POWER_POF_THRESHOLD NRF_POWER_POFTHR_V19 // 1.9V threshold for CR2032
+static volatile bool low_power_alert = false;
 
 /* Power state machine */
 enum power_mode {
@@ -100,6 +113,26 @@ static void gzll_results_work_handler(struct k_work *work);
 static void send_packet_work_handler(struct k_work *work);
 
 void update_keystate(uint8_t *data_payload, size_t key_index, bool state);
+void power_warn_event_handler(void);
+
+static nrfx_power_pofwarn_config_t pof_config = {
+    .handler = power_warn_event_handler,
+    .thr = LOW_POWER_POF_THRESHOLD
+};
+
+static void power_failure_init(void)
+{
+    nrfx_power_pof_init(&pof_config);
+    nrfx_power_pof_enable(&pof_config);
+}
+
+
+void power_warn_event_handler(void)
+{
+    // We'll leave this on unconditionally.
+    // If the battery is replaced, the flag will be false again on power up
+    low_power_alert = true;
+}
 
 int main(void)
 {
@@ -128,8 +161,12 @@ int main(void)
         update_keystate(prev_button_states, i, state);
         update_keystate(current_button_states, i, state);
     }
+    update_keystate(prev_button_states, NUM_BUTTONS, false); // Initialize power alert bit to 0
+    update_keystate(current_button_states, NUM_BUTTONS, false); // Initialize power alert bit
 
     /* --- Gazell Initialization --- */
+    power_failure_init();
+
     result_value = gzll_glue_init();
     if (!result_value) {
         LOG_ERR("Cannot initialize GZLL glue code");
@@ -169,6 +206,7 @@ int main(void)
         for (int i = 0; i < NUM_BUTTONS; i++) {
             update_keystate(current_button_states, i, gpio_pin_get_dt(&buttons[i]));
         }
+        update_keystate(current_button_states, NUM_BUTTONS, low_power_alert); // Update power alert bit
         state_changed = memcmp(current_button_states, prev_button_states, TX_PAYLOAD_LENGTH) != 0;
 
         /* If any button changed state, trigger a send */

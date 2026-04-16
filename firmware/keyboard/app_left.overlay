@@ -1,4 +1,3 @@
-
 / {
     aliases {
         sw0 = &button0;
@@ -46,7 +45,7 @@
         };
         button4: button_4 {
             gpios = <&gpio0 26 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-            label = "Button 0";
+            label = "Button 4";
         };
         button5: button_5 {
             gpios = <&gpio0 25 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
