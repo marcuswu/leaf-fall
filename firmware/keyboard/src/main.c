@@ -244,7 +244,10 @@ int main(void)
     }
 }
 
-void update_keystate(uint8_t *data_payload, size_t key_index, bool state)
+// Update keystate buffer based on received data payload for a given key position
+// key_index is the index of the key in the overall keyboard (0 to NUM_BUTTONS-1)
+// inline the function to avoid function call overhead since this will be called for every key in the received payload
+inline void update_keystate(uint8_t *data_payload, size_t key_index, bool state)
 {
     size_t byte_index = key_index / 8;
     size_t bit_index = key_index % 8;
@@ -256,7 +259,10 @@ void update_keystate(uint8_t *data_payload, size_t key_index, bool state)
     }
 }
 
-bool get_keystate(uint8_t *data_payload, size_t key_index)
+// Helper function to get the state of a key from the data payload
+// Used for logging the state of keys based on the payload we're sending
+// inline the function to avoid function call overhead since this will be called for every key in the sent payload
+inline bool get_keystate(uint8_t *data_payload, size_t key_index)
 {
     size_t byte_index = key_index / 8;
     size_t bit_index = key_index % 8;
