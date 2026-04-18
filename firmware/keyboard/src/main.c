@@ -208,6 +208,7 @@ int main(void)
         }
         update_keystate(current_button_states, NUM_BUTTONS, low_power_alert); // Update power alert bit
         state_changed = memcmp(current_button_states, prev_button_states, TX_PAYLOAD_LENGTH) != 0;
+        memcpy(prev_button_states, current_button_states, TX_PAYLOAD_LENGTH);
 
         /* If any button changed state, trigger a send */
         if (state_changed) {

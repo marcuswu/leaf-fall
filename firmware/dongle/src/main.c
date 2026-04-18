@@ -197,13 +197,11 @@ inline void update_keystate(uint32_t pipe, uint8_t *data_payload, size_t row, si
     This leaves some unused bits in each byte which we use to design a termination bit pattern that
     will never appear in actual key data to indicate end of frame to the host.
     */
-    const size_t max_column = (row == FULL_ROWS) ? KEYS_FINAL_ROW_HALF-1 : KEYS_PER_ROW_HALF-1;
-    size_t column_index = (max_column*2) - (column + max_column);
     // Each row takes 2 bytes in the keystate buffer, left half is in even bytes and right half is in odd bytes
     // Find the byte for the key based on row, and set/clear the bit (column) based on the received data
     size_t keystate_index = row * 2 + (pipe == PIPE_NUMBER_LEFT ? 0 : 1); 
-    keystate[keystate_index] &= ~(1 << column_index); // Clear bit in keystate buffer
-    keystate[keystate_index] |= (bit_value << column_index); // Set bit in keystate buffer based on received data
+    keystate[keystate_index] &= ~(1 << column); // Clear bit in keystate buffer
+    keystate[keystate_index] |= (bit_value << column); // Set bit in keystate buffer based on received data
 }
 
 void nrf_gzll_device_tx_success(uint32_t pipe, nrf_gzll_device_tx_info_t tx_info) {}
