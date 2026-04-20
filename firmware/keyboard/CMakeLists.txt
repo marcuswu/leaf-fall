@@ -19,4 +19,6 @@ else()
     target_compile_definitions(app PRIVATE KEYBOARD_LEFT)
 endif()
 
+include_directories(config)
+
 target_sources(app PRIVATE src/main.c)

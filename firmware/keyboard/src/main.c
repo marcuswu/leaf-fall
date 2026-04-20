@@ -5,40 +5,37 @@
 #include <string.h>
 
 #include <nrfx_power.h>
+#include <nrfx_gpiote.h>
+#include <nrfx_rtc.h>
 #include <nrf_gzll.h>
 #include <gzll_glue.h>
+#include "leaf_fold.h"
 
 LOG_MODULE_REGISTER(app, LOG_LEVEL_INF); // Use INF for RTT logs
 
-/* Pipe number based on keyboard side */
-#ifdef KEYBOARD_RIGHT
-#define PIPE_NUMBER 1
-#else
-#define PIPE_NUMBER 0
-#endif
-
-/* Polling and debounce delay in milliseconds */
-#define POLLING_INTERVAL_MS 50
+#define DEBOUNCE_TICKS 5
 
 /* Define the number of buttons we are polling. */
-
 #define NUM_BUTTONS 22
-
 #define HALF_NUM_BITS NUM_BUTTONS + 1 // Total bits needed (22 buttons + 1 power alert bit)
 
-/* The payload length is the full array of buttons. */
-#define TX_PAYLOAD_LENGTH (HALF_NUM_BITS + 7) / 8 // Number of bytes needed to represent NUM_BUTTONS bits
+/* Number of bytes needed to represent NUM_BUTTONS bits */
+#define TX_PAYLOAD_LENGTH (HALF_NUM_BITS + 7) / 8
 
 /* Maximum number of transmission attempts */
 #define MAX_TX_ATTEMPTS 100
 
-/* --- NEW: Power Saving --- */
-#define INACTIVITY_TIMEOUT_MEDIUM_MS (15 * 1000) // 15 seconds
-#define INACTIVITY_TIMEOUT_SLEEP_MS  (30 * 1000) // 30 seconds
+/* Sleep settings for power saving */
+#define INACTIVITY_TIMEOUT_LIGHT_SLEEP_TICKS 1500  // ~1.5 seconds
+#define INACTIVITY_TIMEOUT_HEAVY_SLEEP_TICKS 10000 // ~10 seconds
 
-/* CR2032 low-power threshold and alert state */
-#define LOW_POWER_POF_THRESHOLD NRF_POWER_POFTHR_V19 // 1.9V threshold for CR2032
+/* CR2032 low-power threshold and power alert state */
+#define LOW_POWER_POF_THRESHOLD NRF_POWER_POFTHR_V19
 static volatile bool low_power_alert = false;
+
+static nrfx_rtc_t rtc_debounce = NRFX_RTC_INSTANCE(0);
+static nrfx_rtc_t rtc_keepalive = NRFX_RTC_INSTANCE(1);
+static nrfx_gpiote_t gpiote_instance = NRFX_GPIOTE_INSTANCE(0);
 
 /* Power state machine */
 enum power_mode {
@@ -47,9 +44,10 @@ enum power_mode {
     POWER_MODE_SLEEP
 };
 static enum power_mode current_power_mode = POWER_MODE_HIGH;
-static uint32_t inactivity_counter_ms = 0;
-/* --- END NEW --- */
+static uint32_t inactivity_counter_ticks = 0;
 
+static uint32_t debounce_ticks;
+static volatile bool debouncing = false;
 
 /*
  * Create an array of gpio_dt_spec structs, initialized using the
@@ -80,9 +78,9 @@ static const struct gpio_dt_spec buttons[NUM_BUTTONS] = {
     GPIO_DT_SPEC_GET(DT_ALIAS(sw21), gpios),
 };
 
-/* Create arrays to hold the current and previous state of all buttons. */
-static uint8_t current_button_states[TX_PAYLOAD_LENGTH] = {0}; // Buffer to hold current button states (1=pressed, 0=released)
-static uint8_t prev_button_states[TX_PAYLOAD_LENGTH] = {0}; // Buffer to hold previous button states
+/* State variables to hold the current and debounce state of all buttons. */
+static uint32_t current_key_states = 0;
+static uint32_t debounce_key_states = 0;
 
 /* Gazell Link Layer TX result structure */
 struct gzll_tx_result {
@@ -107,76 +105,56 @@ K_MSGQ_DEFINE(gzll_msgq,
 static struct k_work gzll_results_work;
 static struct k_work send_packet_work;
 
-/* Function prototypes */
+/* Gazell Link Layer function prototypes */
 static void gzll_tx_result_handler(struct gzll_tx_result *tx_result);
 static void gzll_results_work_handler(struct k_work *work);
 static void send_packet_work_handler(struct k_work *work);
 
-void update_keystate(uint8_t *data_payload, size_t key_index, bool state);
+// Interrupt handler prototypes
+void wake_handler(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t trigger, void *p_context);
 void power_warn_event_handler(void);
+void keepalive_handler(nrfx_rtc_int_type_t int_type);
+void debounce_handler(nrfx_rtc_int_type_t int_type);
+void check_inactivity_timeout(void);
 
+// power failure warning configuration
 static nrfx_power_pofwarn_config_t pof_config = {
     .handler = power_warn_event_handler,
     .thr = LOW_POWER_POF_THRESHOLD
 };
 
+// Read the state of all buttons and return as a bitfield
+static inline uint32_t read_keys(void)
+{
+    // nrf_gpio_port_in_read() can read the entire port of GPIOs at once
+    // We can use this to read all buttons in one go, then update the keystate buffer
+    return nrf_gpio_port_in_read(NRF_GPIO) & INPUT_MASK;
+}
+
+// Initialize pof event configuration
 static void power_failure_init(void)
 {
     nrfx_power_pof_init(&pof_config);
     nrfx_power_pof_enable(&pof_config);
 }
 
-
-void power_warn_event_handler(void)
-{
-    // We'll leave this on unconditionally.
-    // If the battery is replaced, the flag will be false again on power up
-    low_power_alert = true;
-}
-
-int main(void)
-{
-    int err;
+// Initialize gazell link layer configuration
+void gazell_init() {
     bool result_value;
 
-    /* --- Work Queue Initialization --- */
     k_work_init(&gzll_results_work, gzll_results_work_handler);
     k_work_init(&send_packet_work, send_packet_work_handler);
-
-    /* --- GPIO Button Configuration (Polling) --- */
-    for (int i = 0; i < NUM_BUTTONS; i++) {
-        if (!gpio_is_ready_dt(&buttons[i])) {
-            LOG_ERR("Error: button device %s is not ready", buttons[i].port->name);
-            return 0;
-        }
-        err = gpio_pin_configure_dt(&buttons[i], GPIO_INPUT);
-        if (err) {
-            LOG_ERR("Error %d: failed to configure %s pin %d",
-                err, buttons[i].port->name, buttons[i].pin);
-            return 0;
-        }
-
-        /* Read the initial state of all buttons (0 = released) */
-        int state = gpio_pin_get_dt(&buttons[i]);
-        update_keystate(prev_button_states, i, state);
-        update_keystate(current_button_states, i, state);
-    }
-    update_keystate(prev_button_states, NUM_BUTTONS, false); // Initialize power alert bit to 0
-    update_keystate(current_button_states, NUM_BUTTONS, false); // Initialize power alert bit
-
-    /* --- Gazell Initialization --- */
-    power_failure_init();
 
     result_value = gzll_glue_init();
     if (!result_value) {
         LOG_ERR("Cannot initialize GZLL glue code");
-        return 0;
+        return;
     }
 
     result_value = nrf_gzll_init(NRF_GZLL_MODE_DEVICE);
     if (!result_value) {
         LOG_ERR("Cannot initialize GZLL");
-        return 0;
+        return;
     }
 
     // --- Set Base Addresses (from our previous fix) ---
@@ -189,75 +167,177 @@ int main(void)
     result_value = nrf_gzll_enable();
     if (!result_value) {
         LOG_ERR("Cannot enable GZLL");
-        return 0;
+        return;
     }
 
     // --- NEW: Set initial power mode ---
     nrf_gzll_set_tx_power(NRF_GZLL_TX_POWER_0_DBM); // 0dBm is max power
     current_power_mode = POWER_MODE_HIGH;
     LOG_INF("Gzll device started in HIGH POWER mode (Pipe %d).", PIPE_NUMBER);
-    
+}
+
+// Initialize Real Time Counter to handle key state changes, debouncing, and inactivity timeouts
+void rtc_config(void)
+{
+    nrfx_rtc_config_t rtc_debounce_config = {
+        .prescaler = NRF_RTC_FREQ_TO_PRESCALER(1000), // 1000 Hz to optimize response time
+        .interrupt_priority = NRFX_RTC_DEFAULT_CONFIG_IRQ_PRIORITY,
+        .tick_latency = NRFX_RTC_US_TO_TICKS(2000, 32768), // 2ms max latency
+        .reliable = false
+    };
+    nrfx_rtc_config_t rtc_keepalive_config = {
+        .prescaler = NRF_RTC_FREQ_TO_PRESCALER(8), // 8 Hz
+        .interrupt_priority = NRFX_RTC_DEFAULT_CONFIG_IRQ_PRIORITY,
+        .tick_latency = NRFX_RTC_US_TO_TICKS(2000, 32768), // 2ms max latency
+        .reliable = false
+    };
+
+    // debounce handler handles recognizing and sending key state changes and inactivity management
+    nrfx_rtc_init(&rtc_debounce, &rtc_debounce_config, &debounce_handler);
+    nrfx_rtc_enable(&rtc_debounce);
+
+    // keepalive handler handles sending periodic keepalive key state updates
+    nrfx_rtc_init(&rtc_keepalive, &rtc_keepalive_config, &keepalive_handler);
+    nrfx_rtc_enable(&rtc_keepalive);
+}
+
+// Initialize GPIOTE to wake up on button presses if we are in sleep mode
+void gpiote_config(void)
+{
+    nrfx_gpiote_init(&gpiote_instance, 0);
+    // Wake up on any button press using GPIOTE events
+    // pull pin up since buttons connect to GND when pressed
+    nrf_gpio_pin_pull_t pull_config = NRF_GPIO_PIN_PULLUP;
+    // Send GPIOTE event on high-to-low transition (button press)
+    nrfx_gpiote_trigger_config_t trigger_config =  {
+        .trigger = NRFX_GPIOTE_TRIGGER_TOGGLE,
+        .p_in_channel = NULL
+    };
+    // Any button press will trigger the wake handler
+    nrfx_gpiote_handler_config_t handler_config = {
+        .handler = wake_handler,
+        .p_context = NULL
+    };
+    nrfx_gpiote_input_pin_config_t input_config = {
+        .p_pull_config = &pull_config,
+        .p_trigger_config = &trigger_config,
+        .p_handler_config = &handler_config
+    };
+    for (int i = 0; i < NUM_BUTTONS; i++) {
+        nrfx_gpiote_input_configure(&gpiote_instance, buttons[i].pin, &input_config);
+    }
+    // set initial key states
+    current_key_states = read_keys();
+}
+
+int main(void)
+{
+    // Initialize pof, gazell, rtc, and gpiote subsystems
+    power_failure_init();
+    gazell_init();
+    rtc_config();
+    gpiote_config();
+
     /*
-     * The main loop now polls ALL buttons and checks for ANY state change.
-     * It also manages the power-saving timeouts.
+     * The main loop just waits for events
      */
     while (true) {
-        bool state_changed = false;
-        for (int i = 0; i < NUM_BUTTONS; i++) {
-            update_keystate(current_button_states, i, gpio_pin_get_dt(&buttons[i]));
-        }
-        update_keystate(current_button_states, NUM_BUTTONS, low_power_alert); // Update power alert bit
-        state_changed = memcmp(current_button_states, prev_button_states, TX_PAYLOAD_LENGTH) != 0;
-        memcpy(prev_button_states, current_button_states, TX_PAYLOAD_LENGTH);
-
-        /* If any button changed state, trigger a send */
-        if (state_changed) {
-            // --- NEW: Reset inactivity counter on any key press ---
-            inactivity_counter_ms = 0;
-            
-            // Submit the work to wake up (if needed) and send
-            k_work_submit(&send_packet_work);
-        
-        } else {
-            // --- NEW: No keys pressed, increment inactivity counter ---
-            inactivity_counter_ms += POLLING_INTERVAL_MS;
-
-            // Check for 30-second SLEEP timeout
-            if (inactivity_counter_ms >= INACTIVITY_TIMEOUT_SLEEP_MS &&
-                current_power_mode != POWER_MODE_SLEEP) 
-            {
-                LOG_INF("30s inactivity. Entering SLEEP mode (disabling Gazell).");
-                nrf_gzll_disable();
-                current_power_mode = POWER_MODE_SLEEP;
-            }
-            // Check for 15-second MEDIUM power timeout
-            else if (inactivity_counter_ms >= INACTIVITY_TIMEOUT_MEDIUM_MS &&
-                     current_power_mode == POWER_MODE_HIGH)
-            {
-                LOG_INF("15s inactivity. Entering MEDIUM power mode (-8dBm).");
-                // We're still on, but at a lower power
-                nrf_gzll_set_tx_power(NRF_GZLL_TX_POWER_N8_DBM);
-                current_power_mode = POWER_MODE_MEDIUM;
-            }
-        }
-
-        k_sleep(K_MSEC(POLLING_INTERVAL_MS));
+        __WFE(); // Wait for event (low-power sleep until next RTC interrupt or GPIO event)
+        __SEV(); // Ensure that we wake up on the next event
+        __WFE(); // Wait for event (consume the event that woke us up)
     }
 }
 
-// Update keystate buffer based on received data payload for a given key position
-// key_index is the index of the key in the overall keyboard (0 to NUM_BUTTONS-1)
-// inline the function to avoid function call overhead since this will be called for every key in the received payload
-inline void update_keystate(uint8_t *data_payload, size_t key_index, bool state)
+/* ---- Interrupt Handlers ---- */
+void power_warn_event_handler(void)
 {
-    size_t byte_index = key_index / 8;
-    size_t bit_index = key_index % 8;
+    // We'll leave this on unconditionally.
+    // If the battery is replaced, the flag will be false again on power up
+    low_power_alert = true;
+}
 
-    if (state) {
-        data_payload[byte_index] |= (1 << bit_index);
-    } else {
-        data_payload[byte_index] &= ~(1 << bit_index);
+void wake_handler(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t trigger, void *p_context)
+{
+    // This will be called on any button press due to our GPIOTE configuration
+    // We can use this to wake up from sleep immediately without waiting for the next RTC tick
+    if (current_power_mode == POWER_MODE_SLEEP) {
+        LOG_INF("Woke up from SLEEP due to GPIO event. Re-enabling Gazell in HIGH power mode.");
+        nrf_gzll_enable();
+        nrf_gzll_set_tx_power(NRF_GZLL_TX_POWER_0_DBM);
+        current_power_mode = POWER_MODE_HIGH;
+        nrfx_rtc_enable(&rtc_debounce);
+        nrfx_rtc_enable(&rtc_keepalive);
     }
+    if (current_power_mode == POWER_MODE_MEDIUM) {
+        LOG_INF("Activity detected from GPIO event. Setting HIGH power mode.");
+        nrf_gzll_set_tx_power(NRF_GZLL_TX_POWER_0_DBM);
+        current_power_mode = POWER_MODE_HIGH;
+    }
+}
+
+/* ---- Tick Handlers ---- */
+
+// Send key states at 8hz keepalive interval even w/o key changes
+void keepalive_handler(nrfx_rtc_int_type_t int_type)
+{
+    k_work_submit(&send_packet_work);
+}
+
+// Handle debouncing key presses and sleep logic for inactivity
+void debounce_handler(nrfx_rtc_int_type_t int_type)
+{
+    if (!debouncing && current_key_states != read_keys()) {
+        // If we detect a change and we're not already debouncing, start debouncing
+        debouncing = true;
+        debounce_key_states = read_keys();
+        debounce_ticks = 0;
+    }
+
+    if (debouncing) {
+        if (debounce_key_states != read_keys()) {
+            debouncing = false;
+        } else {
+            debounce_ticks++;
+            if (debounce_ticks >= DEBOUNCE_TICKS) {
+                debouncing = false;
+                current_key_states = debounce_key_states;
+                k_work_submit(&send_packet_work);
+            }
+        }
+    }
+
+    check_inactivity_timeout();
+}
+
+void check_inactivity_timeout(void)
+{
+    if (read_keys() != 0) {
+        // If any key is pressed, reset the inactivity counter and ensure we're in high power mode
+        inactivity_counter_ticks = 0;
+        return;
+    }
+
+    inactivity_counter_ticks += 1;
+
+    if (inactivity_counter_ticks <= INACTIVITY_TIMEOUT_LIGHT_SLEEP_TICKS) {
+        return;
+    }
+
+    if (current_power_mode == POWER_MODE_HIGH) {
+        // Reduce transmit power to save battery
+        LOG_INF("Inactivity detected. Setting MEDIUM power mode.");
+        nrf_gzll_set_tx_power(NRF_GZLL_TX_POWER_N8_DBM); // Reduce power to -4dBm
+        current_power_mode = POWER_MODE_MEDIUM;
+    } else if (current_power_mode == POWER_MODE_MEDIUM && inactivity_counter_ticks >= INACTIVITY_TIMEOUT_HEAVY_SLEEP_TICKS) {
+        // Reduce power to minimum -- wakes up on GPIO event
+        LOG_INF("Extended inactivity detected. Setting SLEEP mode.");
+        nrf_gzll_set_tx_power(NRF_GZLL_TX_POWER_N8_DBM);
+        nrf_gzll_disable();
+        current_power_mode = POWER_MODE_SLEEP;
+        nrfx_rtc_disable(&rtc_debounce);
+        nrfx_rtc_disable(&rtc_keepalive);
+    }
+
 }
 
 // Helper function to get the state of a key from the data payload
@@ -271,12 +351,12 @@ inline bool get_keystate(uint8_t *data_payload, size_t key_index)
     return (data_payload[byte_index] & (1 << bit_index)) != 0;
 }
 
+
 static void send_packet_work_handler(struct k_work *work)
 {
     ARG_UNUSED(work);
     bool result_value;
 
-    // --- NEW: Wake-up logic ---
     // If we're asleep, wake up and set to high power
     if (current_power_mode == POWER_MODE_SLEEP) {
         LOG_INF("Waking from SLEEP. Re-enabling Gazell in HIGH power mode.");
@@ -291,13 +371,35 @@ static void send_packet_work_handler(struct k_work *work)
         nrf_gzll_set_tx_power(NRF_GZLL_TX_POWER_0_DBM);
         current_power_mode = POWER_MODE_HIGH;
     }
-    // --- END NEW ---
 
     
     char state_string[NUM_BUTTONS + 1];
 
-    // Copy the current (logical 1=pressed) state
-    memcpy(data_payload, current_button_states, TX_PAYLOAD_LENGTH);
+    // Update the payload based on the current key states.
+    data_payload[0] = (current_key_states & 1<<S00) ? 1 : 0 << 7 |
+                       (current_key_states & 1<<S01) ? 1 : 0 << 6 | 
+                       (current_key_states & 1<<S02) ? 1 : 0 << 5 | 
+                       (current_key_states & 1<<S03) ? 1 : 0 << 4 | 
+                       (current_key_states & 1<<S04) ? 1 : 0 << 3 | 
+                       (current_key_states & 1<<S05) ? 1 : 0 << 2 | 
+                       (current_key_states & 1<<S06) ? 1 : 0 << 1 | 
+                       (current_key_states & 1<<S07) ? 1 : 0;
+    data_payload[1] = (current_key_states & 1<<S08) ? 1 : 0 << 7 | 
+                       (current_key_states & 1<<S09) ? 1 : 0 << 6 | 
+                       (current_key_states & 1<<S10) ? 1 : 0 << 5 |
+                       (current_key_states & 1<<S11) ? 1 : 0 << 4 |
+                       (current_key_states & 1<<S12) ? 1 : 0 << 3 |
+                       (current_key_states & 1<<S13) ? 1 : 0 << 2 |
+                       (current_key_states & 1<<S14) ? 1 : 0 << 1 |
+                       (current_key_states & 1<<S15) ? 1 : 0;
+    data_payload[2] = (current_key_states & 1<<S16) ? 1 : 0 << 7 |
+                       (current_key_states & 1<<S17) ? 1 : 0 << 6 |
+                       (current_key_states & 1<<S18) ? 1 : 0 << 5 |
+                       (current_key_states & 1<<S19) ? 1 : 0 << 4 |
+                       (current_key_states & 1<<S20) ? 1 : 0 << 3 |
+                       (current_key_states & 1<<S21) ? 1 : 0 << 2 |
+                       (low_power_alert) ? 1 : 0 << 1 | // Power alert bit
+                       0; // Padding bit
 
     /* Build the log string based on the (correct) packet data */
     for (int i = 0; i < NUM_BUTTONS; i++) {
