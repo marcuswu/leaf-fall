@@ -16,11 +16,11 @@ jobs:
       run: |
         wget https://files.nordicsemi.com/ui/api/v1/download\?repoKey\=swtools\&path\=external/nrfutil/executables/x86_64-unknown-linux-gnu/nrfutil\&isNativeBrowsing\=false -O nrfutil
         chmod +x nrfutil
-        nrfutil install sdk-manager
-        nrfutil install toolchain-manager
-        nrfutil sdk-manager install v3.2.4
-        nrfutil toolchain-manager install --ncs-version v3.2.4
-        source <(nrfutil toolchain-manager env --as-script)
+        ./nrfutil install sdk-manager
+        ./nrfutil install toolchain-manager
+        ./nrfutil sdk-manager install v3.2.4
+        ./nrfutil toolchain-manager install --ncs-version v3.2.4
+        source <(./nrfutil toolchain-manager env --as-script)
     - name: Build firmware
       run: |
         cd zephyr-workspace/leaf-fall/firmware/keyboard
