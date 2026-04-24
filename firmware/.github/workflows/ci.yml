@@ -1,0 +1,35 @@
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        path: zephyr-workspace/leaf-fall
+    - name: Set up NRF Connect SDK
+      run: |
+        wget https://files.nordicsemi.com/ui/api/v1/download\?repoKey\=swtools\&path\=external/nrfutil/executables/x86_64-unknown-linux-gnu/nrfutil\&isNativeBrowsing\=false -O nrfutil
+        chmod +x nrfutil
+        nrfutil install sdk-manager
+        nrfutil install toolchain-manager
+        nrfutil sdk-manager install v3.2.4
+        nrfutil toolchain-manager install --ncs-version v3.2.4
+        source <(nrfutil toolchain-manager env --as-script)
+    - name: Build firmware
+      run: |
+        cd zephyr-workspace/leaf-fall/firmware/keyboard
+        west build --pristine --build-dir $HOME/src/leaf-fall/firmware/keyboard/left_build --board nrf52_adafruit_feather/nrf52832
+        KEYBOARD_RIGHT=ON west build --pristine --build-dir $HOME/src/leaf-fall/firmware/keyboard/right_build --board nrf52_adafruit_feather/nrf52832
+        cd ../dongle
+        west build --pristine --build-dir $HOME/src/leaf-fall/firmware/dongle/build --board nrf52_adafruit_feather/nrf52832
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: keyboard-firmware
+        path: ${{ github.workspace }}/src/leaf-fall/firmware/**/merged.hex
