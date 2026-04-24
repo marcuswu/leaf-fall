@@ -1,11 +1,15 @@
 cmake_minimum_required(VERSION 3.20.0)
 
 # Option to choose keyboard side (left or right)
-option(KEYBOARD_RIGHT "Build for right keyboard half" OFF)
+if(NOT DEFINED KEYBOARD_RIGHT AND DEFINED ENV{KEYBOARD_RIGHT})
+    set(KEYBOARD_RIGHT $ENV{KEYBOARD_RIGHT} CACHE BOOL "Build for right keyboard half" FORCE)
+endif()
 
 if(KEYBOARD_RIGHT)
+    message(STATUS "Enabling right overlay")
     set(DTC_OVERLAY_FILE app_right.overlay)
 else()
+    message(STATUS "Enabling left overlay")
     set(DTC_OVERLAY_FILE app_left.overlay)
 endif()
 
@@ -14,8 +18,10 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(leaf_fall_keyboard)
 
 if(KEYBOARD_RIGHT)
+    message(STATUS "Enabling right compile option")
     target_compile_definitions(app PRIVATE KEYBOARD_RIGHT)
 else()
+    message(STATUS "Enabling left compile option")
     target_compile_definitions(app PRIVATE KEYBOARD_LEFT)
 endif()
 
