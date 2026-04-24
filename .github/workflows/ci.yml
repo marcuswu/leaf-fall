@@ -16,13 +16,18 @@ jobs:
       run: |
         wget https://files.nordicsemi.com/ui/api/v1/download\?repoKey\=swtools\&path\=external/nrfutil/executables/x86_64-unknown-linux-gnu/nrfutil\&isNativeBrowsing\=false -O nrfutil
         chmod +x nrfutil
+        echo "Installing sdk manager"
         ./nrfutil install sdk-manager
+        echo "Installing toolchain manager"
         ./nrfutil install toolchain-manager
+        echo "Installing NRF SDK"
         ./nrfutil sdk-manager install v3.2.4
+        echo "Installing NRF toolchain"
         ./nrfutil toolchain-manager install --ncs-version v3.2.4
-        source <(./nrfutil toolchain-manager env --as-script)
     - name: Build firmware
       run: |
+        echo "Setting up build env"
+        source <(./nrfutil toolchain-manager env --as-script)
         cd zephyr-workspace/leaf-fall/firmware/keyboard
         west build --pristine --build-dir $HOME/src/leaf-fall/firmware/keyboard/left_build --board nrf52_adafruit_feather/nrf52832
         KEYBOARD_RIGHT=ON west build --pristine --build-dir $HOME/src/leaf-fall/firmware/keyboard/right_build --board nrf52_adafruit_feather/nrf52832
