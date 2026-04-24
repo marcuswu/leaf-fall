@@ -30,6 +30,7 @@ jobs:
         source <(./nrfutil toolchain-manager env --as-script)
         cd zephyr-workspace/leaf-fall/firmware/keyboard
         pwd
+        find .
         echo ${{ github.workspace }}
         echo "Building left keyboard firmware"
         west build --pristine --build-dir $HOME/src/leaf-fall/firmware/keyboard/left_build --board nrf52_adafruit_feather/nrf52832
@@ -42,4 +43,4 @@ jobs:
       uses: actions/upload-artifact@v7
       with:
         name: keyboard-firmware
-        path: ${{ github.workspace }}/src/leaf-fall/firmware/**/merged.hex
+        path: ${{ github.workspace }}/zephyr-workspace/leaf-fall/firmware/**/merged.hex
