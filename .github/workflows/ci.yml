@@ -29,7 +29,7 @@ jobs:
         echo "Setting up build env"
         source <(./nrfutil toolchain-manager env --as-script)
         cd zephyr-workspace/leaf-fall/firmware/keyboard
-        pwd
+        env
         find .
         echo ${{ github.workspace }}
         echo "Building left keyboard firmware"
