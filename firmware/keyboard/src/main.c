@@ -233,14 +233,20 @@ void gpiote_config(void)
 int main(void)
 {
     // Initialize pof, gazell, rtc, and gpiote subsystems
+    LOG_INF("Starting Leaf Fall Keyboard...");
+    LOG_INF("Setting up POF warning");
     power_failure_init();
+    LOG_INF("Initializing Gazell");
     gazell_init();
+    LOG_INF("Configuring RTC");
     rtc_config();
+    LOG_INF("Configuring GPIOTE");
     gpiote_config();
 
     /*
      * The main loop just waits for events
      */
+    LOG_INF("Entering main loop, waiting for events...");
     while (true) {
         __WFE(); // Wait for event (low-power sleep until next RTC interrupt or GPIO event)
         __SEV(); // Ensure that we wake up on the next event
@@ -291,16 +297,19 @@ void debounce_handler(nrfx_rtc_int_type_t int_type)
         debouncing = true;
         debounce_key_states = read_keys();
         debounce_ticks = 0;
+        LOG_INF("Starting debounce. key states: 0x%08X", debounce_key_states);
     }
 
     if (debouncing) {
         if (debounce_key_states != read_keys()) {
             debouncing = false;
+            LOG_INF("Detected key change, resetting debounce. key states: 0x%08X", debounce_key_states);
         } else {
             debounce_ticks++;
             if (debounce_ticks >= DEBOUNCE_TICKS) {
                 debouncing = false;
                 current_key_states = debounce_key_states;
+                LOG_INF("Debounce complete. key states: 0x%08X", current_key_states);
                 k_work_submit(&send_packet_work);
             }
         }
