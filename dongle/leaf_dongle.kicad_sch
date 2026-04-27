@@ -308,146 +308,6 @@
 			)
 			(embedded_fonts no)
 		)
-		(symbol "Device:R"
-			(pin_numbers
-				(hide yes)
-			)
-			(pin_names
-				(offset 0)
-			)
-			(exclude_from_sim no)
-			(in_bom yes)
-			(on_board yes)
-			(in_pos_files yes)
-			(duplicate_pin_numbers_are_jumpers no)
-			(property "Reference" "R"
-				(at 2.032 0 90)
-				(show_name no)
-				(do_not_autoplace no)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Value" "R"
-				(at 0 0 90)
-				(show_name no)
-				(do_not_autoplace no)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Footprint" ""
-				(at -1.778 0 90)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Datasheet" ""
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "Description" "Resistor"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "ki_keywords" "R res resistor"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(property "ki_fp_filters" "R_*"
-				(at 0 0 0)
-				(show_name no)
-				(do_not_autoplace no)
-				(hide yes)
-				(effects
-					(font
-						(size 1.27 1.27)
-					)
-				)
-			)
-			(symbol "R_0_1"
-				(rectangle
-					(start -1.016 -2.54)
-					(end 1.016 2.54)
-					(stroke
-						(width 0.254)
-						(type default)
-					)
-					(fill
-						(type none)
-					)
-				)
-			)
-			(symbol "R_1_1"
-				(pin passive line
-					(at 0 3.81 270)
-					(length 1.27)
-					(name ""
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "1"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-				(pin passive line
-					(at 0 -3.81 90)
-					(length 1.27)
-					(name ""
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-					(number "2"
-						(effects
-							(font
-								(size 1.27 1.27)
-							)
-						)
-					)
-				)
-			)
-			(embedded_fonts no)
-		)
 		(symbol "LED:SK6812"
 			(pin_names
 				(offset 0.254)
@@ -709,6 +569,285 @@
 						)
 					)
 					(number "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+			)
+			(embedded_fonts no)
+		)
+		(symbol "Logic_LevelTranslator:SN74LVC1T45DCK"
+			(exclude_from_sim no)
+			(in_bom yes)
+			(on_board yes)
+			(in_pos_files yes)
+			(duplicate_pin_numbers_are_jumpers no)
+			(property "Reference" "U"
+				(at -6.35 8.89 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Value" "SN74LVC1T45DCK"
+				(at 3.81 8.89 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+					(justify left)
+				)
+			)
+			(property "Footprint" "Package_TO_SOT_SMD:SOT-363_SC-70-6"
+				(at 0 -11.43 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Datasheet" "http://www.ti.com/lit/ds/symlink/sn74lvc1t45.pdf"
+				(at -22.86 -16.51 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "Description" "Single-Bit Dual-Supply Bus Transceiver With Configurable Voltage Translation and 3-State Outputs, SOT-363"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_keywords" "Level-Shifter CMOS-TTL-Translation"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(property "ki_fp_filters" "*SC?70*"
+				(at 0 0 0)
+				(show_name no)
+				(do_not_autoplace no)
+				(hide yes)
+				(effects
+					(font
+						(size 1.27 1.27)
+					)
+				)
+			)
+			(symbol "SN74LVC1T45DCK_0_1"
+				(rectangle
+					(start -7.62 7.62)
+					(end 7.62 -7.62)
+					(stroke
+						(width 0.254)
+						(type default)
+					)
+					(fill
+						(type background)
+					)
+				)
+				(polyline
+					(pts
+						(xy -2.54 0) (xy -2.54 1.016) (xy -0.762 1.016)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -0.762 0) (xy -0.762 2.032) (xy 1.016 1.016) (xy -0.762 0)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy -0.762 -1.016) (xy -2.54 -1.016) (xy -2.54 0) (xy -4.572 0)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 1.016 1.016) (xy 2.794 1.016) (xy 2.794 0) (xy 4.064 0)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 1.016 0) (xy 1.016 -1.778) (xy 1.016 -2.032) (xy -0.762 -1.016) (xy 1.016 0)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+				(polyline
+					(pts
+						(xy 2.794 0) (xy 2.794 -1.016) (xy 1.016 -1.016)
+					)
+					(stroke
+						(width 0)
+						(type default)
+					)
+					(fill
+						(type none)
+					)
+				)
+			)
+			(symbol "SN74LVC1T45DCK_1_1"
+				(pin power_in line
+					(at -2.54 10.16 270)
+					(length 2.54)
+					(name "VCCA"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "1"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 0 -10.16 90)
+					(length 2.54)
+					(name "GND"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "2"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at -10.16 0 0)
+					(length 2.54)
+					(name "A"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "3"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin bidirectional line
+					(at 10.16 0 180)
+					(length 2.54)
+					(name "B"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "4"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin input line
+					(at -10.16 -5.08 0)
+					(length 2.54)
+					(name "DIR"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "5"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+				)
+				(pin power_in line
+					(at 2.54 10.16 270)
+					(length 2.54)
+					(name "VCCB"
+						(effects
+							(font
+								(size 1.27 1.27)
+							)
+						)
+					)
+					(number "6"
 						(effects
 							(font
 								(size 1.27 1.27)
@@ -5109,13 +5248,13 @@
 		)
 	)
 	(junction
-		(at 142.24 135.89)
+		(at 153.67 125.73)
 		(diameter 0)
 		(color 0 0 0 0)
-		(uuid "524feffa-321d-4390-ae9e-0bfcb0764023")
+		(uuid "89f03bad-c849-4aad-87b2-589555effa7c")
 	)
 	(junction
-		(at 142.24 151.13)
+		(at 171.45 143.51)
 		(diameter 0)
 		(color 0 0 0 0)
 		(uuid "c018ed6b-61dd-464e-85c4-b0cc2c6c1896")
@@ -5141,7 +5280,7 @@
 		(uuid "1c42d0f3-3299-4298-accc-18811179adf0")
 	)
 	(no_connect
-		(at 173.99 143.51)
+		(at 203.2 135.89)
 		(uuid "1d12a813-5ec1-4ede-99cf-9b1b69c3d9e9")
 	)
 	(no_connect
@@ -5362,7 +5501,7 @@
 	)
 	(wire
 		(pts
-			(xy 142.24 151.13) (xy 166.37 151.13)
+			(xy 171.45 143.51) (xy 195.58 143.51)
 		)
 		(stroke
 			(width 0)
@@ -5372,17 +5511,27 @@
 	)
 	(wire
 		(pts
-			(xy 125.73 151.13) (xy 125.73 135.89)
+			(xy 163.83 130.81) (xy 163.83 125.73)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
-		(uuid "1ee13c49-839c-44dd-a103-3ed980fd7762")
+		(uuid "28c05963-2ae5-4d83-a4d0-ca988c9665b3")
 	)
 	(wire
 		(pts
-			(xy 149.86 143.51) (xy 158.75 143.51)
+			(xy 163.83 125.73) (xy 153.67 125.73)
+		)
+		(stroke
+			(width 0)
+			(type default)
+		)
+		(uuid "4718ce95-2fcf-47b8-a289-9b4991b32f10")
+	)
+	(wire
+		(pts
+			(xy 179.07 135.89) (xy 187.96 135.89)
 		)
 		(stroke
 			(width 0)
@@ -5392,43 +5541,13 @@
 	)
 	(wire
 		(pts
-			(xy 142.24 135.89) (xy 166.37 135.89)
+			(xy 171.45 128.27) (xy 195.58 128.27)
 		)
 		(stroke
 			(width 0)
 			(type default)
 		)
 		(uuid "ab3b89ed-ac34-49c0-aa56-c2d763ab4659")
-	)
-	(wire
-		(pts
-			(xy 129.54 151.13) (xy 125.73 151.13)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "d246ddee-9b35-499c-9045-50728aa9add7")
-	)
-	(wire
-		(pts
-			(xy 137.16 151.13) (xy 142.24 151.13)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "f053e20d-4b7a-4115-adde-aeb0072cec4c")
-	)
-	(wire
-		(pts
-			(xy 125.73 135.89) (xy 142.24 135.89)
-		)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "ffda4966-7ef5-4fee-9c62-6af4c2c22333")
 	)
 	(global_label "UART_TX"
 		(shape input)
@@ -5670,30 +5789,6 @@
 			)
 		)
 	)
-	(global_label "NEO"
-		(shape input)
-		(at 134.62 143.51 180)
-		(fields_autoplaced yes)
-		(effects
-			(font
-				(size 1.27 1.27)
-			)
-			(justify right)
-		)
-		(uuid "aa45ec77-4238-4ef2-8bc5-f5c5eace7169")
-		(property "Intersheetrefs" "${INTERSHEET_REFS}"
-			(at 127.8248 143.51 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-				(justify right)
-			)
-		)
-	)
 	(global_label "USB_D-"
 		(shape input)
 		(at 243.84 74.93 0)
@@ -5715,6 +5810,30 @@
 					(size 1.27 1.27)
 				)
 				(justify left)
+			)
+		)
+	)
+	(global_label "NEO"
+		(shape input)
+		(at 143.51 135.89 180)
+		(fields_autoplaced yes)
+		(effects
+			(font
+				(size 1.27 1.27)
+			)
+			(justify right)
+		)
+		(uuid "e10a93c1-6681-4eb1-be10-908b6e31bfd6")
+		(property "Intersheetrefs" "${INTERSHEET_REFS}"
+			(at 136.7148 135.89 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
 			)
 		)
 	)
@@ -6059,6 +6178,161 @@
 		)
 	)
 	(symbol
+		(lib_id "power:-3V3")
+		(at 151.13 146.05 180)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "1b5a5344-5cd4-4855-907c-1f957a486ffe")
+		(property "Reference" "#PWR026"
+			(at 151.13 142.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "-3V3"
+			(at 151.13 151.638 90)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 151.13 146.05 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 151.13 146.05 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"-3V3\""
+			(at 151.13 146.05 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "7685516b-c187-48d2-96b1-f08f1c79fcda")
+		)
+		(instances
+			(project "leaf_dongle"
+				(path "/f6de454d-ae1c-4e0e-a2ba-a5d84f7bcb5c"
+					(reference "#PWR026")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "power:VCC")
+		(at 156.21 146.05 180)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "1c71174b-24e5-49d9-9548-1443a0e6481f")
+		(property "Reference" "#PWR027"
+			(at 156.21 142.24 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "VCC"
+			(at 156.21 151.13 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" ""
+			(at 156.21 146.05 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" ""
+			(at 156.21 146.05 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Power symbol creates a global label with name \"VCC\""
+			(at 156.21 146.05 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "1"
+			(uuid "c48408ea-31c4-4967-9346-d1f5135d16f2")
+		)
+		(instances
+			(project "leaf_dongle"
+				(path "/f6de454d-ae1c-4e0e-a2ba-a5d84f7bcb5c"
+					(reference "#PWR027")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
 		(lib_id "power:GND")
 		(at 195.58 76.2 90)
 		(unit 1)
@@ -6139,7 +6413,7 @@
 	)
 	(symbol
 		(lib_id "LED:SK6812")
-		(at 166.37 143.51 0)
+		(at 195.58 135.89 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -6150,7 +6424,7 @@
 		(fields_autoplaced yes)
 		(uuid "225d87c9-ace6-42e9-bbd3-77d8d2983b7e")
 		(property "Reference" "D2"
-			(at 176.53 137.0898 0)
+			(at 205.74 129.4698 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -6160,7 +6434,7 @@
 			)
 		)
 		(property "Value" "SK6812"
-			(at 176.53 139.6298 0)
+			(at 205.74 132.0098 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -6170,7 +6444,7 @@
 			)
 		)
 		(property "Footprint" "LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm"
-			(at 167.64 151.13 0)
+			(at 196.85 143.51 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6182,7 +6456,7 @@
 			)
 		)
 		(property "Datasheet" "https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf"
-			(at 168.91 153.035 0)
+			(at 198.12 145.415 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6194,7 +6468,7 @@
 			)
 		)
 		(property "Description" "RGB LED with integrated controller"
-			(at 166.37 143.51 0)
+			(at 195.58 135.89 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6384,8 +6658,8 @@
 		)
 	)
 	(symbol
-		(lib_id "Device:R")
-		(at 142.24 132.08 0)
+		(lib_id "power:GND")
+		(at 153.67 125.73 180)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -6394,31 +6668,30 @@
 		(in_pos_files yes)
 		(dnp no)
 		(fields_autoplaced yes)
-		(uuid "44f29157-c4de-4108-9f1b-71b4e5161299")
-		(property "Reference" "R1"
-			(at 144.78 130.8099 0)
+		(uuid "3a4a66a4-1e09-49cd-bd2e-beafa975842b")
+		(property "Reference" "#PWR025"
+			(at 153.67 119.38 0)
+			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify left)
 			)
 		)
-		(property "Value" "0.068"
-			(at 144.78 133.3499 0)
+		(property "Value" "GND"
+			(at 153.67 120.65 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
 				(font
 					(size 1.27 1.27)
 				)
-				(justify left)
 			)
 		)
-		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
-			(at 140.462 132.08 90)
+		(property "Footprint" ""
+			(at 153.67 125.73 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6429,7 +6702,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 142.24 132.08 0)
+			(at 153.67 125.73 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6439,8 +6712,8 @@
 				)
 			)
 		)
-		(property "Description" "Resistor"
-			(at 142.24 132.08 0)
+		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
+			(at 153.67 125.73 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6449,17 +6722,14 @@
 					(size 1.27 1.27)
 				)
 			)
-		)
-		(pin "2"
-			(uuid "7e7eaff0-ee86-48ed-bdfa-29fa7b4ea0a2")
 		)
 		(pin "1"
-			(uuid "7900a463-7306-4a45-a0ea-ea580c83c494")
+			(uuid "8bc85e4a-5bc7-4c97-8028-ce45c87c4462")
 		)
 		(instances
 			(project "leaf_dongle"
 				(path "/f6de454d-ae1c-4e0e-a2ba-a5d84f7bcb5c"
-					(reference "R1")
+					(reference "#PWR025")
 					(unit 1)
 				)
 			)
@@ -6704,7 +6974,7 @@
 	)
 	(symbol
 		(lib_id "LED:SK6812")
-		(at 142.24 143.51 0)
+		(at 171.45 135.89 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -6715,7 +6985,7 @@
 		(fields_autoplaced yes)
 		(uuid "5917567a-31a1-4b2e-9a55-bb7c40ec82d7")
 		(property "Reference" "D1"
-			(at 152.4 137.0898 0)
+			(at 181.61 129.4698 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -6725,7 +6995,7 @@
 			)
 		)
 		(property "Value" "SK6812"
-			(at 152.4 139.6298 0)
+			(at 181.61 132.0098 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -6735,7 +7005,7 @@
 			)
 		)
 		(property "Footprint" "LED_SMD:LED_SK6812_PLCC4_5.0x5.0mm_P3.2mm"
-			(at 143.51 151.13 0)
+			(at 172.72 143.51 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6747,7 +7017,7 @@
 			)
 		)
 		(property "Datasheet" "https://cdn-shop.adafruit.com/product-files/1138/SK6812+LED+datasheet+.pdf"
-			(at 144.78 153.035 0)
+			(at 173.99 145.415 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -6759,7 +7029,7 @@
 			)
 		)
 		(property "Description" "RGB LED with integrated controller"
-			(at 142.24 143.51 0)
+			(at 171.45 135.89 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -7189,6 +7459,99 @@
 			(project "leaf_dongle"
 				(path "/f6de454d-ae1c-4e0e-a2ba-a5d84f7bcb5c"
 					(reference "#PWR021")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "Logic_LevelTranslator:SN74LVC1T45DCK")
+		(at 153.67 135.89 180)
+		(unit 1)
+		(body_style 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(in_pos_files yes)
+		(dnp no)
+		(uuid "6b88b6af-c991-40ac-a8a6-a5865887d6ad")
+		(property "Reference" "U2"
+			(at 134.112 123.19 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Value" "SN74LVC1T45DCK"
+			(at 134.112 125.73 0)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify right)
+			)
+		)
+		(property "Footprint" "Package_TO_SOT_SMD:SOT-363_SC-70-6"
+			(at 153.67 124.46 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Datasheet" "http://www.ti.com/lit/ds/symlink/sn74lvc1t45.pdf"
+			(at 176.53 119.38 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Description" "Single-Bit Dual-Supply Bus Transceiver With Configurable Voltage Translation and 3-State Outputs, SOT-363"
+			(at 153.67 135.89 0)
+			(hide yes)
+			(show_name no)
+			(do_not_autoplace no)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(pin "2"
+			(uuid "776e805c-9a6e-4975-ac19-f1245d907252")
+		)
+		(pin "4"
+			(uuid "426db9e6-0d61-494e-969a-98617542ed75")
+		)
+		(pin "1"
+			(uuid "7e528990-0ef0-48f8-8845-3d23be7175e9")
+		)
+		(pin "6"
+			(uuid "ce7a1373-69d3-4ee6-83bf-7565d0b9cbad")
+		)
+		(pin "3"
+			(uuid "96ea734b-d41b-48de-912d-2e4cb4e024f7")
+		)
+		(pin "5"
+			(uuid "d985a02a-055d-48c9-8984-0a8c7538aee1")
+		)
+		(instances
+			(project "leaf_dongle"
+				(path "/f6de454d-ae1c-4e0e-a2ba-a5d84f7bcb5c"
+					(reference "U2")
 					(unit 1)
 				)
 			)
@@ -7885,84 +8248,6 @@
 		)
 	)
 	(symbol
-		(lib_id "power:VCC")
-		(at 142.24 128.27 0)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(fields_autoplaced yes)
-		(uuid "aabae45b-a976-4291-b298-a6b757114ddc")
-		(property "Reference" "#PWR019"
-			(at 142.24 132.08 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "VCC"
-			(at 142.24 123.19 0)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" ""
-			(at 142.24 128.27 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 142.24 128.27 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Power symbol creates a global label with name \"VCC\""
-			(at 142.24 128.27 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "1"
-			(uuid "29b4caa1-f4fe-469f-bc24-55bb8e117fba")
-		)
-		(instances
-			(project "leaf_dongle"
-				(path "/f6de454d-ae1c-4e0e-a2ba-a5d84f7bcb5c"
-					(reference "#PWR019")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
 		(lib_id "power:GND")
 		(at 243.84 97.79 90)
 		(unit 1)
@@ -8043,7 +8328,7 @@
 	)
 	(symbol
 		(lib_id "power:GND")
-		(at 142.24 151.13 0)
+		(at 171.45 143.51 0)
 		(unit 1)
 		(body_style 1)
 		(exclude_from_sim no)
@@ -8054,7 +8339,7 @@
 		(fields_autoplaced yes)
 		(uuid "b272bd2c-2e0e-41e8-a11d-8a70b43d4849")
 		(property "Reference" "#PWR015"
-			(at 142.24 157.48 0)
+			(at 171.45 149.86 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -8065,7 +8350,7 @@
 			)
 		)
 		(property "Value" "GND"
-			(at 142.24 156.21 0)
+			(at 171.45 148.59 0)
 			(show_name no)
 			(do_not_autoplace no)
 			(effects
@@ -8075,7 +8360,7 @@
 			)
 		)
 		(property "Footprint" ""
-			(at 142.24 151.13 0)
+			(at 171.45 143.51 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -8086,7 +8371,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 142.24 151.13 0)
+			(at 171.45 143.51 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -8097,7 +8382,7 @@
 			)
 		)
 		(property "Description" "Power symbol creates a global label with name \"GND\" , ground"
-			(at 142.24 151.13 0)
+			(at 171.45 143.51 0)
 			(hide yes)
 			(show_name no)
 			(do_not_autoplace no)
@@ -8114,85 +8399,6 @@
 			(project "leaf_dongle"
 				(path "/f6de454d-ae1c-4e0e-a2ba-a5d84f7bcb5c"
 					(reference "#PWR015")
-					(unit 1)
-				)
-			)
-		)
-	)
-	(symbol
-		(lib_id "Device:R")
-		(at 133.35 151.13 90)
-		(unit 1)
-		(body_style 1)
-		(exclude_from_sim no)
-		(in_bom yes)
-		(on_board yes)
-		(in_pos_files yes)
-		(dnp no)
-		(uuid "d320909f-ff01-43fb-96d8-798a64384bb8")
-		(property "Reference" "R2"
-			(at 133.35 154.432 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Value" "0.22"
-			(at 133.35 156.464 90)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Footprint" "Resistor_SMD:R_0805_2012Metric"
-			(at 133.35 152.908 90)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Datasheet" ""
-			(at 133.35 151.13 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(property "Description" "Resistor"
-			(at 133.35 151.13 0)
-			(hide yes)
-			(show_name no)
-			(do_not_autoplace no)
-			(effects
-				(font
-					(size 1.27 1.27)
-				)
-			)
-		)
-		(pin "2"
-			(uuid "d6b60bed-e905-4b5e-b74c-bc1a6039a116")
-		)
-		(pin "1"
-			(uuid "9df048a6-a309-449f-9a76-5f319825d769")
-		)
-		(instances
-			(project "leaf_dongle"
-				(path "/f6de454d-ae1c-4e0e-a2ba-a5d84f7bcb5c"
-					(reference "R2")
 					(unit 1)
 				)
 			)
