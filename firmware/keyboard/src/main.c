@@ -4,6 +4,7 @@
 #include <zephyr/logging/log.h>
 #include <string.h>
 
+#include <gpiote_nrfx.h>
 #include <nrfx_power.h>
 #include <nrfx_gpiote.h>
 #include <nrfx_rtc.h>
@@ -11,7 +12,7 @@
 #include <gzll_glue.h>
 #include "leaf_fold.h"
 
-LOG_MODULE_REGISTER(app, LOG_LEVEL_INF); // Use INF for RTT logs
+LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG); // Use DBG for RTT logs
 
 #define DEBOUNCE_TICKS 5
 
@@ -35,7 +36,9 @@ static volatile bool low_power_alert = false;
 
 static nrfx_rtc_t rtc_debounce = NRFX_RTC_INSTANCE(0);
 static nrfx_rtc_t rtc_keepalive = NRFX_RTC_INSTANCE(1);
-static nrfx_gpiote_t gpiote_instance = NRFX_GPIOTE_INSTANCE(0);
+#define GPIOTE_INST NRF_DT_GPIOTE_INST(DT_ALIAS(sw0), gpios)
+#define GPIOTE_NODE DT_NODELABEL(__CONCAT(gpiote, GPIOTE_INST))
+static nrfx_gpiote_t *gpiote_instance = &GPIOTE_NRFX_INST_BY_NODE(GPIOTE_NODE);
 
 /* Power state machine */
 enum power_mode {
@@ -204,7 +207,9 @@ void rtc_config(void)
 // Initialize GPIOTE to wake up on button presses if we are in sleep mode
 void gpiote_config(void)
 {
-    nrfx_gpiote_init(&gpiote_instance, 0);
+    LOG_INF("initializing gpiote");
+    nrfx_gpiote_init(gpiote_instance, 0);
+    LOG_INF("gpiote initialized");
     // Wake up on any button press using GPIOTE events
     // pull pin up since buttons connect to GND when pressed
     nrf_gpio_pin_pull_t pull_config = NRF_GPIO_PIN_PULLUP;
@@ -224,9 +229,11 @@ void gpiote_config(void)
         .p_handler_config = &handler_config
     };
     for (int i = 0; i < NUM_BUTTONS; i++) {
-        nrfx_gpiote_input_configure(&gpiote_instance, buttons[i].pin, &input_config);
+        LOG_INF("configuring GPIOTE for pin %d (index %d)", buttons[i].pin, i);
+        nrfx_gpiote_input_configure(gpiote_instance, buttons[i].pin, &input_config);
     }
     // set initial key states
+    LOG_INF("getting initial key states");
     current_key_states = read_keys();
 }
 

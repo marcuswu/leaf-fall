@@ -1,0 +1,5 @@
+board:
+  name: mdbt42q
+  vendor: Raytac
+  socs:
+    - name: nrf52832
