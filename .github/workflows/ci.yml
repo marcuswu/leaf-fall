@@ -33,13 +33,13 @@ jobs:
         echo ${{ github.workspace }}
         pwd
         echo "Building left keyboard firmware"
-        echo "west build --build-dir $RUNNER_WORKSPACE/leaf-fall/zephyr-workspace/leaf-fall/firmware/keyboard/build $RUNNER_WORKSPACE/leaf-fall/firmware/keyboard --pristine --board mdbt42q/nrf52832 -- -DDEBUG_THREAD_INFO=On -DCONFIG_DEBUG_OPTIMIZATIONS=y -DCONFIG_DEBUG_THREAD_INFO=y -Dkeyboard_DEBUG_THREAD_INFO=On -DBOARD_ROOT=\"$RUNNER_WORKSPACE/leaf-fall/firmware\""
-        west build --build-dir $RUNNER_WORKSPACE/leaf-fall/zephyr-workspace/leaf-fall/firmware/keyboard/build $RUNNER_WORKSPACE/leaf-fall/firmware/keyboard --pristine --board mdbt42q/nrf52832 -- -DDEBUG_THREAD_INFO=On -DCONFIG_DEBUG_OPTIMIZATIONS=y -DCONFIG_DEBUG_THREAD_INFO=y -Dkeyboard_DEBUG_THREAD_INFO=On -DBOARD_ROOT="$RUNNER_WORKSPACE/leaf-fall/firmware"
+        echo "west build --build-dir $RUNNER_WORKSPACE/leaf-fall/zephyr-workspace/leaf-fall/firmware/keyboard/build $RUNNER_WORKSPACE/leaf-fall/zephyr-workspace/leaf-fall/firmware/keyboard --pristine --board mdbt42q/nrf52832 -- -DDEBUG_THREAD_INFO=On -DCONFIG_DEBUG_OPTIMIZATIONS=y -DCONFIG_DEBUG_THREAD_INFO=y -Dkeyboard_DEBUG_THREAD_INFO=On -DBOARD_ROOT=\"$RUNNER_WORKSPACE/leaf-fall/zephyr-workspace/leaf-fall/firmware\""
+        west build --build-dir $RUNNER_WORKSPACE/leaf-fall/zephyr-workspace/leaf-fall/firmware/keyboard/build $RUNNER_WORKSPACE/leaf-fall/zephyr-workspace/leaf-fall/firmware/keyboard --pristine --board mdbt42q/nrf52832 -- -DDEBUG_THREAD_INFO=On -DCONFIG_DEBUG_OPTIMIZATIONS=y -DCONFIG_DEBUG_THREAD_INFO=y -Dkeyboard_DEBUG_THREAD_INFO=On -DBOARD_ROOT="$RUNNER_WORKSPACE/leaf-fall/zephyr-workspace/leaf-fall/firmware"
         echo "Building right keyboard firmware"
-        KEYBOARD_RIGHT=ON west build --build-dir $RUNNER_WORKSPACE/leaf-fall/zephyr-workspace/leaf-fall/firmware/keyboard/build $RUNNER_WORKSPACE/leaf-fall/firmware/keyboard --pristine --board mdbt42q/nrf52832 -- -DDEBUG_THREAD_INFO=On -DCONFIG_DEBUG_OPTIMIZATIONS=y -DCONFIG_DEBUG_THREAD_INFO=y -Dkeyboard_DEBUG_THREAD_INFO=On -DBOARD_ROOT="$RUNNER_WORKSPACE/leaf-fall/firmware"
+        KEYBOARD_RIGHT=ON west build --build-dir $RUNNER_WORKSPACE/leaf-fall/zephyr-workspace/leaf-fall/firmware/keyboard/build $RUNNER_WORKSPACE/leaf-fall/zephyr-workspace/leaf-fall/firmware/keyboard --pristine --board mdbt42q/nrf52832 -- -DDEBUG_THREAD_INFO=On -DCONFIG_DEBUG_OPTIMIZATIONS=y -DCONFIG_DEBUG_THREAD_INFO=y -Dkeyboard_DEBUG_THREAD_INFO=On -DBOARD_ROOT="$RUNNER_WORKSPACE/leaf-fall/zephyr-workspace/leaf-fall/firmware"
         cd ../dongle
         echo "Building dongle firmware"
-        west build --build-dir $RUNNER_WORKSPACE/leaf-fall/zephyr-workspace/leaf-fall/firmware/dongle/build $RUNNER_WORKSPACE/leaf-fall/firmware/dongle --pristine --board mdbt42q/nrf52832 -- -DDEBUG_THREAD_INFO=On -DCONFIG_DEBUG_OPTIMIZATIONS=y -DCONFIG_DEBUG_THREAD_INFO=y -Dkeyboard_DEBUG_THREAD_INFO=On -DBOARD_ROOT="$RUNNER_WORKSPACE/leaf-fall/firmware"
+        west build --build-dir $RUNNER_WORKSPACE/leaf-fall/zephyr-workspace/leaf-fall/firmware/dongle/build $RUNNER_WORKSPACE/leaf-fall/zephyr-workspace/leaf-fall/firmware/dongle --pristine --board mdbt42q/nrf52832 -- -DDEBUG_THREAD_INFO=On -DCONFIG_DEBUG_OPTIMIZATIONS=y -DCONFIG_DEBUG_THREAD_INFO=y -Dkeyboard_DEBUG_THREAD_INFO=On -DBOARD_ROOT="$RUNNER_WORKSPACE/leaf-fall/zephyr-workspace/leaf-fall/firmware"
     - name: Upload artifacts
       uses: actions/upload-artifact@v7
       with:
