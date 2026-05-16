@@ -30,12 +30,12 @@ jobs:
         source <(./nrfutil toolchain-manager env --as-script)
         cd zephyr-workspace/leaf-fall/firmware/keyboard
         env
-        find ~/ncs
         echo ${{ github.workspace }}
+        pwd
         echo "Building left keyboard firmware"
-        west build --pristine --build-dir $HOME/src/leaf-fall/firmware/keyboard/left_build --board nrf52_adafruit_feather/nrf52832
+        west build --build-dir $HOME/zephyr-workspace/leaf-fall/firmware/keyboard/build $HOME/zephyr-workspace/leaf-fall/firmware/keyboard --pristine --board mdbt42q/nrf52832 -- -DDEBUG_THREAD_INFO=On -DCONFIG_DEBUG_OPTIMIZATIONS=y -DCONFIG_DEBUG_THREAD_INFO=y -Dkeyboard_DEBUG_THREAD_INFO=On -DBOARD_ROOT="$HOME/zephyr-workspace/leaf-fall/firmware"
         echo "Building right keyboard firmware"
-        KEYBOARD_RIGHT=ON west build --pristine --build-dir $HOME/src/leaf-fall/firmware/keyboard/right_build --board nrf52_adafruit_feather/nrf52832
+        KEYBOARD_RIGHT=ON west build --build-dir $HOME/zephyr-workspace/leaf-fall/firmware/keyboard/build $HOME/zephyr-workspace/leaf-fall/firmware/keyboard --pristine --board mdbt42q/nrf52832 -- -DDEBUG_THREAD_INFO=On -DCONFIG_DEBUG_OPTIMIZATIONS=y -DCONFIG_DEBUG_THREAD_INFO=y -Dkeyboard_DEBUG_THREAD_INFO=On -DBOARD_ROOT="$HOME/zephyr-workspace/leaf-fall/firmware"
         cd ../dongle
         echo "Building dongle firmware"
         west build --pristine --build-dir $HOME/src/leaf-fall/firmware/dongle/build --board nrf52_adafruit_feather/nrf52832
