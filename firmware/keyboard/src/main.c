@@ -30,12 +30,14 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG); // Use DBG for RTT logs
 #define INACTIVITY_TIMEOUT_LIGHT_SLEEP_TICKS 1500  // ~1.5 seconds
 #define INACTIVITY_TIMEOUT_HEAVY_SLEEP_TICKS 10000 // ~10 seconds
 
+#define DEBOUNCE_FREQUENCY_HZ 1000 // 1000Hz debounce ticks
+#define KEEPALIVE_TICKS 1250 // 8Hz ticks for keepalive packets, but implemented as debounce ticks
+
 /* CR2032 low-power threshold and power alert state */
 #define LOW_POWER_POF_THRESHOLD NRF_POWER_POFTHR_V19
 static volatile bool low_power_alert = false;
 
-static nrfx_rtc_t rtc0 = NRFX_RTC_INSTANCE(1);
-static nrfx_rtc_t rtc1 = NRFX_RTC_INSTANCE(2);
+static nrfx_rtc_t rtc = NRFX_RTC_INSTANCE(1);
 #define GPIOTE_INST NRF_DT_GPIOTE_INST(DT_ALIAS(sw0), gpios)
 #define GPIOTE_NODE DT_NODELABEL(__CONCAT(gpiote, GPIOTE_INST))
 static nrfx_gpiote_t *gpiote_instance = &GPIOTE_NRFX_INST_BY_NODE(GPIOTE_NODE);
@@ -49,7 +51,8 @@ enum power_mode {
 static enum power_mode current_power_mode = POWER_MODE_HIGH;
 static uint32_t inactivity_counter_ticks = 0;
 
-static uint32_t debounce_ticks;
+static uint32_t debounce_ticks = 0;
+static uint32_t keepalive_ticks = 0;
 static volatile bool debouncing = false;
 
 /*
@@ -189,34 +192,19 @@ void rtc_config(void)
         .tick_latency = NRFX_RTC_US_TO_TICKS(2000, 32768), // 2ms max latency
         .reliable = false
     };
-    nrfx_rtc_config_t rtc_keepalive_config = {
-        .prescaler = NRF_RTC_FREQ_TO_PRESCALER(8), // 8 Hz
-        .interrupt_priority = NRFX_RTC_DEFAULT_CONFIG_IRQ_PRIORITY,
-        .tick_latency = NRFX_RTC_US_TO_TICKS(2000, 32768), // 2ms max latency
-        .reliable = false
-    };
 
     // debounce handler handles recognizing and sending key state changes and inactivity management
-    err = nrfx_rtc_init(&rtc0, &rtc_debounce_config, debounce_handler);
+    err = nrfx_rtc_init(&rtc, &rtc_debounce_config, debounce_handler);
     if (err != NRFX_SUCCESS) {
         LOG_ERR("Failed to initialize debounce RTC: %d", err);
     }
-    nrfx_rtc_tick_enable(&rtc0, true);
-
-    // keepalive handler handles sending periodic keepalive key state updates
-    err = nrfx_rtc_init(&rtc1, &rtc_keepalive_config, keepalive_handler);
-    if (err != NRFX_SUCCESS) {
-        LOG_ERR("Failed to initialize keepalive RTC: %d", err);
-    }
-    nrfx_rtc_tick_enable(&rtc1, true);
+    nrfx_rtc_tick_enable(&rtc, true);
 }
 
 static void manual_isr_setup()
 {
-    IRQ_DIRECT_CONNECT(RTC0_IRQn, 0, nrfx_rtc_0_irq_handler, 0);
     IRQ_DIRECT_CONNECT(RTC1_IRQn, 0, nrfx_rtc_1_irq_handler, 0);
     IRQ_DIRECT_CONNECT(GPIOTE_IRQn, 0, nrfx_gpiote_irq_handler, 0);
-    irq_enable(RTC0_IRQn);
     irq_enable(RTC1_IRQn);
     irq_enable(GPIOTE_IRQn);
 }
@@ -295,8 +283,7 @@ void wake_handler(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t trigger, void *p_
         nrf_gzll_enable();
         nrf_gzll_set_tx_power(NRF_GZLL_TX_POWER_0_DBM);
         current_power_mode = POWER_MODE_HIGH;
-        nrfx_rtc_enable(&rtc0);
-        nrfx_rtc_enable(&rtc1);
+        nrfx_rtc_enable(&rtc);
     }
     if (current_power_mode == POWER_MODE_MEDIUM) {
         LOG_INF("Activity detected from GPIO event. Setting HIGH power mode.");
@@ -316,6 +303,13 @@ void keepalive_handler(nrfx_rtc_int_type_t int_type)
 // Handle debouncing key presses and sleep logic for inactivity
 void debounce_handler(nrfx_rtc_int_type_t int_type)
 {
+    // check to see if we need to run the keepalive handler
+    keepalive_ticks++;
+    if (keepalive_ticks >= KEEPALIVE_TICKS) {
+        keepalive_ticks = 0;
+        keepalive_handler(int_type);
+    }
+
     if (!debouncing && current_key_states != read_keys()) {
         // If we detect a change and we're not already debouncing, start debouncing
         debouncing = true;
@@ -368,8 +362,7 @@ void check_inactivity_timeout(void)
         nrf_gzll_set_tx_power(NRF_GZLL_TX_POWER_N8_DBM);
         nrf_gzll_disable();
         current_power_mode = POWER_MODE_SLEEP;
-        nrfx_rtc_disable(&rtc0);
-        nrfx_rtc_disable(&rtc1);
+        nrfx_rtc_disable(&rtc);
     }
 
 }
