@@ -28,6 +28,7 @@ jobs:
       run: |
         echo "Setting up build env"
         source <(./nrfutil toolchain-manager env --as-script)
+        export ZEPHYR_BASE=$HOME/ncs/v3.2.4/zephyr
         cd zephyr-workspace/leaf-fall/firmware/keyboard
         env
         echo ${{ github.workspace }}
