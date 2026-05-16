@@ -34,8 +34,8 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG); // Use DBG for RTT logs
 #define LOW_POWER_POF_THRESHOLD NRF_POWER_POFTHR_V19
 static volatile bool low_power_alert = false;
 
-static nrfx_rtc_t rtc_debounce = NRFX_RTC_INSTANCE(0);
-static nrfx_rtc_t rtc_keepalive = NRFX_RTC_INSTANCE(1);
+static nrfx_rtc_t rtc0 = NRFX_RTC_INSTANCE(1);
+static nrfx_rtc_t rtc1 = NRFX_RTC_INSTANCE(2);
 #define GPIOTE_INST NRF_DT_GPIOTE_INST(DT_ALIAS(sw0), gpios)
 #define GPIOTE_NODE DT_NODELABEL(__CONCAT(gpiote, GPIOTE_INST))
 static nrfx_gpiote_t *gpiote_instance = &GPIOTE_NRFX_INST_BY_NODE(GPIOTE_NODE);
@@ -182,6 +182,7 @@ void gazell_init() {
 // Initialize Real Time Counter to handle key state changes, debouncing, and inactivity timeouts
 void rtc_config(void)
 {
+    uint32_t err;
     nrfx_rtc_config_t rtc_debounce_config = {
         .prescaler = NRF_RTC_FREQ_TO_PRESCALER(1000), // 1000 Hz to optimize response time
         .interrupt_priority = NRFX_RTC_DEFAULT_CONFIG_IRQ_PRIORITY,
@@ -196,12 +197,28 @@ void rtc_config(void)
     };
 
     // debounce handler handles recognizing and sending key state changes and inactivity management
-    nrfx_rtc_init(&rtc_debounce, &rtc_debounce_config, &debounce_handler);
-    nrfx_rtc_enable(&rtc_debounce);
+    err = nrfx_rtc_init(&rtc0, &rtc_debounce_config, debounce_handler);
+    if (err != NRFX_SUCCESS) {
+        LOG_ERR("Failed to initialize debounce RTC: %d", err);
+    }
+    nrfx_rtc_tick_enable(&rtc0, true);
 
     // keepalive handler handles sending periodic keepalive key state updates
-    nrfx_rtc_init(&rtc_keepalive, &rtc_keepalive_config, &keepalive_handler);
-    nrfx_rtc_enable(&rtc_keepalive);
+    err = nrfx_rtc_init(&rtc1, &rtc_keepalive_config, keepalive_handler);
+    if (err != NRFX_SUCCESS) {
+        LOG_ERR("Failed to initialize keepalive RTC: %d", err);
+    }
+    nrfx_rtc_tick_enable(&rtc1, true);
+}
+
+static void manual_isr_setup()
+{
+    IRQ_DIRECT_CONNECT(RTC0_IRQn, 0, nrfx_rtc_0_irq_handler, 0);
+    IRQ_DIRECT_CONNECT(RTC1_IRQn, 0, nrfx_rtc_1_irq_handler, 0);
+    IRQ_DIRECT_CONNECT(GPIOTE_IRQn, 0, nrfx_gpiote_irq_handler, 0);
+    irq_enable(RTC0_IRQn);
+    irq_enable(RTC1_IRQn);
+    irq_enable(GPIOTE_IRQn);
 }
 
 // Initialize GPIOTE to wake up on button presses if we are in sleep mode
@@ -229,12 +246,11 @@ void gpiote_config(void)
         .p_handler_config = &handler_config
     };
     for (int i = 0; i < NUM_BUTTONS; i++) {
-        LOG_INF("configuring GPIOTE for pin %d (index %d)", buttons[i].pin, i);
         nrfx_gpiote_input_configure(gpiote_instance, buttons[i].pin, &input_config);
     }
     // set initial key states
-    LOG_INF("getting initial key states");
     current_key_states = read_keys();
+    LOG_INF("Initial key states: 0x%08X", debounce_key_states);
 }
 
 int main(void)
@@ -249,16 +265,16 @@ int main(void)
     rtc_config();
     LOG_INF("Configuring GPIOTE");
     gpiote_config();
+    manual_isr_setup();
 
     /*
      * The main loop just waits for events
      */
     LOG_INF("Entering main loop, waiting for events...");
     while (true) {
-        __WFE(); // Wait for event (low-power sleep until next RTC interrupt or GPIO event)
-        __SEV(); // Ensure that we wake up on the next event
-        __WFE(); // Wait for event (consume the event that woke us up)
+        k_cpu_idle(); // Use Zephyr's idle function to allow for power management and event handling
     }
+    return 0;
 }
 
 /* ---- Interrupt Handlers ---- */
@@ -271,6 +287,7 @@ void power_warn_event_handler(void)
 
 void wake_handler(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t trigger, void *p_context)
 {
+    LOG_INF("GPIO event detected on pin %d, trigger %d", pin, trigger);
     // This will be called on any button press due to our GPIOTE configuration
     // We can use this to wake up from sleep immediately without waiting for the next RTC tick
     if (current_power_mode == POWER_MODE_SLEEP) {
@@ -278,8 +295,8 @@ void wake_handler(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t trigger, void *p_
         nrf_gzll_enable();
         nrf_gzll_set_tx_power(NRF_GZLL_TX_POWER_0_DBM);
         current_power_mode = POWER_MODE_HIGH;
-        nrfx_rtc_enable(&rtc_debounce);
-        nrfx_rtc_enable(&rtc_keepalive);
+        nrfx_rtc_enable(&rtc0);
+        nrfx_rtc_enable(&rtc1);
     }
     if (current_power_mode == POWER_MODE_MEDIUM) {
         LOG_INF("Activity detected from GPIO event. Setting HIGH power mode.");
@@ -330,6 +347,7 @@ void check_inactivity_timeout(void)
     if (read_keys() != 0) {
         // If any key is pressed, reset the inactivity counter and ensure we're in high power mode
         inactivity_counter_ticks = 0;
+        LOG_INF("Activity detected. Resetting inactivity counter.");
         return;
     }
 
@@ -350,8 +368,8 @@ void check_inactivity_timeout(void)
         nrf_gzll_set_tx_power(NRF_GZLL_TX_POWER_N8_DBM);
         nrf_gzll_disable();
         current_power_mode = POWER_MODE_SLEEP;
-        nrfx_rtc_disable(&rtc_debounce);
-        nrfx_rtc_disable(&rtc_keepalive);
+        nrfx_rtc_disable(&rtc0);
+        nrfx_rtc_disable(&rtc1);
     }
 
 }
