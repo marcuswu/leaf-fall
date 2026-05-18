@@ -140,8 +140,7 @@ static nrfx_power_pofwarn_config_t pof_config = {
     .thr = LOW_POWER_POF_THRESHOLD
 };
 
-// Read the state of all buttons and return as a bitfield
-static uint32_t read_keys(bool print_keys)
+static inline uint32_t read_all_keys(bool print_keys)
 {
     k_spinlock_key_t key = k_spin_lock(&key_read_lock);
     uint32_t result = 0;
@@ -160,7 +159,7 @@ static uint32_t read_keys(bool print_keys)
     return result;
 }
 
-/*static inline uint32_t read_keys(bool print_keys)
+static inline uint32_t read_port_keys(bool print_keys)
 {
     k_spinlock_key_t key = k_spin_lock(&key_read_lock);
     // nrf_gpio_port_in_read() can read the entire port of GPIOs at once
@@ -174,21 +173,23 @@ static uint32_t read_keys(bool print_keys)
 
     result = raw_input & INPUT_MASK;
     if (print_keys) {
-        LOG_INF("Raw GPIO input: 0x%08X; Masked input: 0x%08X", raw_input, result);
+        LOG_INF("Raw GPIO data: 0x%08X; Masked read key states: 0x%08X", raw_input, result);
     }
-    // if (result != 0) {
-    //     LOG_INF("Raw GPIO input: 0x%08X", raw_input);
-    //     LOG_INF("read key states: 0x%08X", result);
-    //     // LOG_INF("read key states: 0x%08X after %ld ticks", result, atomic_get(&zero_key_state_ticks));
-    //     // atomic_set(&zero_key_state_ticks, 0);
-    // } //else {
-    //     // atomic_inc(&zero_key_state_ticks);
-    //     // LOG_INF("No keys pressed. raw input: 0x%08X", raw_input);
-    // // }
     k_spin_unlock(&key_read_lock, key);
     return result;
-    //return nrf_gpio_port_in_read(NRF_GPIO) & INPUT_MASK;
-}*/
+}
+
+// Read the state of all buttons and return as a bitfield
+static uint32_t read_keys(bool print_keys)
+{
+    #if 0
+    // read each pin individually
+    return read_all_keys(print_keys);
+    #else
+    // read the entire port at once
+    return read_port_keys(print_keys);
+    #endif
+}
 
 // Initialize pof event configuration
 static void power_failure_init(void)
@@ -261,48 +262,12 @@ void rtc_config(void)
 static void manual_isr_setup()
 {
     IRQ_DIRECT_CONNECT(RTC1_IRQn, 0, nrfx_rtc_1_irq_handler, 0);
-    // IRQ_DIRECT_CONNECT(GPIOTE_IRQn, 0, nrfx_gpiote_irq_handler, 0);
     irq_enable(RTC1_IRQn);
-    // irq_enable(GPIOTE_IRQn);
 }
 
 // Initialize GPIOTE to wake up on button presses if we are in sleep mode
 void gpiote_config(void)
 {
-    // uint32_t err;
-    // LOG_INF("initializing gpiote");
-    // nrfx_gpiote_init(gpiote_instance, 0);
-    // LOG_INF("gpiote initialized");
-    // Wake up on any button press using GPIOTE events
-    // pull pin up since buttons connect to GND when pressed
-    /*nrf_gpio_pin_pull_t pull_config = NRF_GPIO_PIN_PULLUP;
-    // Send GPIOTE event on high-to-low transition (button press)
-    nrfx_gpiote_trigger_config_t trigger_config =  {
-        .trigger = NRFX_GPIOTE_TRIGGER_HITOLO,
-        .p_in_channel = NULL
-    };
-    // Any button press will trigger the wake handler
-    nrfx_gpiote_handler_config_t handler_config = {
-        .handler = button_handler,
-        .p_context = NULL
-    };
-    nrfx_gpiote_input_pin_config_t input_config = {
-        .p_pull_config = &pull_config,
-        .p_trigger_config = &trigger_config,
-        .p_handler_config = &handler_config
-    };
-    for (int i = 0; i < NUM_BUTTONS; i++) {
-        err = nrfx_gpiote_input_configure(gpiote_instance, buttons[i].pin, &input_config);
-        if (err != 0) {
-            LOG_ERR("Failed to initialize GPIOTE pin %d: %d", i, err);
-        }
-        // nrfx_gpiote_trigger_enable(gpiote_instance, buttons[i].pin, true);
-    }
-    // set initial key states
-    current_key_states = read_keys();
-    LOG_INF("Initial keys: 0x%08X", current_key_states);
-    */
-
     // New implementation using Zephyr's GPIO API with interrupts for simplicity and reliability
     for (int i = 0; i < NUM_BUTTONS; i++) {
         // int err = gpio_pin_configure(buttons[i].port, buttons[i].pin, GPIO_INPUT | GPIO_PULL_UP | GPIO_ACTIVE_LOW);
