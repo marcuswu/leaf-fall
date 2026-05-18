@@ -2,6 +2,8 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/irq.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/atomic.h>
+#include <zephyr/spinlock.h>
 #include <string.h>
 
 #include <gpiote_nrfx.h>
@@ -35,12 +37,15 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG); // Use DBG for RTT logs
 
 /* CR2032 low-power threshold and power alert state */
 #define LOW_POWER_POF_THRESHOLD NRF_POWER_POFTHR_V19
-static volatile bool low_power_alert = false;
+static atomic_t low_power_alert = ATOMIC_INIT(0);
+
+// const struct device *port = DEVICE_DT_GET(DT_NODELABEL(gpio0));
 
 static nrfx_rtc_t rtc = NRFX_RTC_INSTANCE(1);
 #define GPIOTE_INST NRF_DT_GPIOTE_INST(DT_ALIAS(sw0), gpios)
 #define GPIOTE_NODE DT_NODELABEL(__CONCAT(gpiote, GPIOTE_INST))
 static nrfx_gpiote_t *gpiote_instance = &GPIOTE_NRFX_INST_BY_NODE(GPIOTE_NODE);
+struct gpio_callback gpio_callback_struct;
 
 /* Power state machine */
 enum power_mode {
@@ -49,10 +54,11 @@ enum power_mode {
     POWER_MODE_SLEEP
 };
 static enum power_mode current_power_mode = POWER_MODE_HIGH;
-static uint32_t inactivity_counter_ticks = 0;
+static atomic_t inactivity_counter_ticks = ATOMIC_INIT(0);
 
 static uint32_t debounce_ticks = 0;
-static uint32_t keepalive_ticks = 0;
+static atomic_t keepalive_ticks = ATOMIC_INIT(0);
+static atomic_t zero_key_state_ticks = ATOMIC_INIT(0);
 static volatile bool debouncing = false;
 
 /*
@@ -87,6 +93,8 @@ static const struct gpio_dt_spec buttons[NUM_BUTTONS] = {
 /* State variables to hold the current and debounce state of all buttons. */
 static uint32_t current_key_states = 0;
 static uint32_t debounce_key_states = 0;
+static struct k_spinlock key_state_lock;
+static struct k_spinlock key_read_lock;
 
 /* Gazell Link Layer TX result structure */
 struct gzll_tx_result {
@@ -101,11 +109,14 @@ static uint8_t data_payload[TX_PAYLOAD_LENGTH];
 /* Placeholder for received ACK payloads from Host. */
 static uint8_t ack_payload[NRF_GZLL_CONST_MAX_PAYLOAD_LENGTH];
 
-/* Gazell Link Layer TX result message queue */
-K_MSGQ_DEFINE(gzll_msgq,
-          sizeof(struct gzll_tx_result),
-          1,
-          sizeof(uint32_t));
+struct gzll_tx_result_node {
+    void *fifo_reserved;
+    struct gzll_tx_result tx_result;
+};
+
+K_FIFO_DEFINE(gzll_tx_result_fifo);
+K_FIFO_DEFINE(gzll_tx_result_free_fifo);
+static struct gzll_tx_result_node gzll_tx_result_nodes[4];
 
 /* Work items */
 static struct k_work gzll_results_work;
@@ -117,11 +128,11 @@ static void gzll_results_work_handler(struct k_work *work);
 static void send_packet_work_handler(struct k_work *work);
 
 // Interrupt handler prototypes
-void wake_handler(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t trigger, void *p_context);
+void button_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins);
 void power_warn_event_handler(void);
-void keepalive_handler(nrfx_rtc_int_type_t int_type);
+// void keepalive_handler(nrfx_rtc_int_type_t int_type);
 void debounce_handler(nrfx_rtc_int_type_t int_type);
-void check_inactivity_timeout(void);
+void check_inactivity_timeout(nrfx_rtc_int_type_t int_type);
 
 // power failure warning configuration
 static nrfx_power_pofwarn_config_t pof_config = {
@@ -130,12 +141,54 @@ static nrfx_power_pofwarn_config_t pof_config = {
 };
 
 // Read the state of all buttons and return as a bitfield
-static inline uint32_t read_keys(void)
+static uint32_t read_keys(bool print_keys)
 {
+    k_spinlock_key_t key = k_spin_lock(&key_read_lock);
+    uint32_t result = 0;
+    for (int i = 0; i < NUM_BUTTONS; i++) {
+        int gpio_value = gpio_pin_get(buttons[i].port, buttons[i].pin);
+        if (gpio_value < 0) {
+            LOG_ERR("Failed to read GPIO pin %d: %d", i, gpio_value);
+            gpio_value = 0; // Treat as unpressed on error
+        }
+        result |= (gpio_value << (buttons[i].pin)); // Use the pin number as the bit index
+    }
+    if (print_keys) {
+        LOG_INF("read key states: 0x%08X", result);
+    }
+    k_spin_unlock(&key_read_lock, key);
+    return result;
+}
+
+/*static inline uint32_t read_keys(bool print_keys)
+{
+    k_spinlock_key_t key = k_spin_lock(&key_read_lock);
     // nrf_gpio_port_in_read() can read the entire port of GPIOs at once
     // We can use this to read all buttons in one go, then update the keystate buffer
-    return nrf_gpio_port_in_read(NRF_GPIO) & INPUT_MASK;
-}
+    uint32_t raw_input = 0;
+    int result = gpio_port_get(buttons[0].port, &raw_input);
+    if (result != 0) {
+        LOG_ERR("Failed to read GPIO port: %d", result);
+        return 0; // Return all keys unpressed on error
+    }
+
+    result = raw_input & INPUT_MASK;
+    if (print_keys) {
+        LOG_INF("Raw GPIO input: 0x%08X; Masked input: 0x%08X", raw_input, result);
+    }
+    // if (result != 0) {
+    //     LOG_INF("Raw GPIO input: 0x%08X", raw_input);
+    //     LOG_INF("read key states: 0x%08X", result);
+    //     // LOG_INF("read key states: 0x%08X after %ld ticks", result, atomic_get(&zero_key_state_ticks));
+    //     // atomic_set(&zero_key_state_ticks, 0);
+    // } //else {
+    //     // atomic_inc(&zero_key_state_ticks);
+    //     // LOG_INF("No keys pressed. raw input: 0x%08X", raw_input);
+    // // }
+    k_spin_unlock(&key_read_lock, key);
+    return result;
+    //return nrf_gpio_port_in_read(NRF_GPIO) & INPUT_MASK;
+}*/
 
 // Initialize pof event configuration
 static void power_failure_init(void)
@@ -161,6 +214,10 @@ void gazell_init() {
     if (!result_value) {
         LOG_ERR("Cannot initialize GZLL");
         return;
+    }
+
+    for (int i = 0; i < (int)(sizeof(gzll_tx_result_nodes) / sizeof(gzll_tx_result_nodes[0])); i++) {
+        k_fifo_put(&gzll_tx_result_free_fifo, &gzll_tx_result_nodes[i]);
     }
 
     // --- Set Base Addresses (from our previous fix) ---
@@ -195,7 +252,7 @@ void rtc_config(void)
 
     // debounce handler handles recognizing and sending key state changes and inactivity management
     err = nrfx_rtc_init(&rtc, &rtc_debounce_config, debounce_handler);
-    if (err != NRFX_SUCCESS) {
+    if (err != 0) {
         LOG_ERR("Failed to initialize debounce RTC: %d", err);
     }
     nrfx_rtc_tick_enable(&rtc, true);
@@ -204,28 +261,29 @@ void rtc_config(void)
 static void manual_isr_setup()
 {
     IRQ_DIRECT_CONNECT(RTC1_IRQn, 0, nrfx_rtc_1_irq_handler, 0);
-    IRQ_DIRECT_CONNECT(GPIOTE_IRQn, 0, nrfx_gpiote_irq_handler, 0);
+    // IRQ_DIRECT_CONNECT(GPIOTE_IRQn, 0, nrfx_gpiote_irq_handler, 0);
     irq_enable(RTC1_IRQn);
-    irq_enable(GPIOTE_IRQn);
+    // irq_enable(GPIOTE_IRQn);
 }
 
 // Initialize GPIOTE to wake up on button presses if we are in sleep mode
 void gpiote_config(void)
 {
-    LOG_INF("initializing gpiote");
-    nrfx_gpiote_init(gpiote_instance, 0);
-    LOG_INF("gpiote initialized");
+    // uint32_t err;
+    // LOG_INF("initializing gpiote");
+    // nrfx_gpiote_init(gpiote_instance, 0);
+    // LOG_INF("gpiote initialized");
     // Wake up on any button press using GPIOTE events
     // pull pin up since buttons connect to GND when pressed
-    nrf_gpio_pin_pull_t pull_config = NRF_GPIO_PIN_PULLUP;
+    /*nrf_gpio_pin_pull_t pull_config = NRF_GPIO_PIN_PULLUP;
     // Send GPIOTE event on high-to-low transition (button press)
     nrfx_gpiote_trigger_config_t trigger_config =  {
-        .trigger = NRFX_GPIOTE_TRIGGER_TOGGLE,
+        .trigger = NRFX_GPIOTE_TRIGGER_HITOLO,
         .p_in_channel = NULL
     };
     // Any button press will trigger the wake handler
     nrfx_gpiote_handler_config_t handler_config = {
-        .handler = wake_handler,
+        .handler = button_handler,
         .p_context = NULL
     };
     nrfx_gpiote_input_pin_config_t input_config = {
@@ -234,17 +292,46 @@ void gpiote_config(void)
         .p_handler_config = &handler_config
     };
     for (int i = 0; i < NUM_BUTTONS; i++) {
-        nrfx_gpiote_input_configure(gpiote_instance, buttons[i].pin, &input_config);
+        err = nrfx_gpiote_input_configure(gpiote_instance, buttons[i].pin, &input_config);
+        if (err != 0) {
+            LOG_ERR("Failed to initialize GPIOTE pin %d: %d", i, err);
+        }
+        // nrfx_gpiote_trigger_enable(gpiote_instance, buttons[i].pin, true);
     }
     // set initial key states
     current_key_states = read_keys();
-    LOG_INF("Initial key states: 0x%08X", debounce_key_states);
+    LOG_INF("Initial keys: 0x%08X", current_key_states);
+    */
+
+    // New implementation using Zephyr's GPIO API with interrupts for simplicity and reliability
+    for (int i = 0; i < NUM_BUTTONS; i++) {
+        // int err = gpio_pin_configure(buttons[i].port, buttons[i].pin, GPIO_INPUT | GPIO_PULL_UP | GPIO_ACTIVE_LOW);
+        int err = gpio_pin_configure_dt(&buttons[i], GPIO_INPUT | GPIO_PULL_UP | GPIO_ACTIVE_LOW);
+        if (err != 0) {
+            LOG_ERR("Failed to configure GPIO pin %d: %d", buttons[i].pin, err);
+            continue;
+        }
+        // Set up the interrupt for every pin. NRF chips can only do this on 6 pins unless using edge sense,
+        // so be sure to set this in your overlay for your gpio (replacing the mask with the pins you need):
+        // sense-edge-mask = < 0xF01FC7FF >;
+        err = gpio_pin_interrupt_configure_dt(&buttons[i], GPIO_INT_EDGE_BOTH);
+        // err = gpio_pin_interrupt_configure(buttons[i].port, buttons[i].pin, GPIO_INT_EDGE_BOTH);
+        if (err < 0) {
+            LOG_ERR("Failed to configure interrupt for GPIO pin %d: %d", buttons[i].pin, err);
+            continue;
+        }
+        LOG_INF("Successfully configured interrupt for GPIO pin %d", buttons[i].pin);
+    }
+    // Set the same button_handler for all button interrupts
+    gpio_init_callback(&gpio_callback_struct, button_handler, INPUT_MASK);
+    gpio_add_callback(buttons[0].port, &gpio_callback_struct);
 }
 
 int main(void)
 {
     // Initialize pof, gazell, rtc, and gpiote subsystems
     LOG_INF("Starting Leaf Fall Keyboard...");
+    LOG_INF("using input mask: 0x%08X", INPUT_MASK);
     LOG_INF("Setting up POF warning");
     power_failure_init();
     LOG_INF("Initializing Gazell");
@@ -270,12 +357,13 @@ void power_warn_event_handler(void)
 {
     // We'll leave this on unconditionally.
     // If the battery is replaced, the flag will be false again on power up
-    low_power_alert = true;
+    atomic_set(&low_power_alert, 1);
 }
 
-void wake_handler(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t trigger, void *p_context)
+// void button_handler(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t trigger, void *p_context)
+void button_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
-    LOG_INF("GPIO event detected on pin %d, trigger %d", pin, trigger);
+    LOG_INF("GPIO event detected on pins %u", pins);
     // This will be called on any button press due to our GPIOTE configuration
     // We can use this to wake up from sleep immediately without waiting for the next RTC tick
     if (current_power_mode == POWER_MODE_SLEEP) {
@@ -290,6 +378,13 @@ void wake_handler(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t trigger, void *p_
         nrf_gzll_set_tx_power(NRF_GZLL_TX_POWER_0_DBM);
         current_power_mode = POWER_MODE_HIGH;
     }
+    k_spinlock_key_t key = k_spin_lock(&key_state_lock);
+    debouncing = true;
+    debounce_key_states = read_keys(true);
+    debounce_ticks = 0;
+    LOG_INF("Key press detected. key states: 0x%08X", debounce_key_states);
+    // k_work_submit(&send_packet_work);
+    k_spin_unlock(&key_state_lock, key);
 }
 
 /* ---- Tick Handlers ---- */
@@ -304,50 +399,49 @@ void keepalive_handler(nrfx_rtc_int_type_t int_type)
 void debounce_handler(nrfx_rtc_int_type_t int_type)
 {
     // check to see if we need to run the keepalive handler
-    keepalive_ticks++;
-    if (keepalive_ticks >= KEEPALIVE_TICKS) {
-        keepalive_ticks = 0;
-        keepalive_handler(int_type);
-    }
+    // LOG_INF("debounce handler. key states: 0x%08X", debounce_key_states);
 
-    if (!debouncing && current_key_states != read_keys()) {
-        // If we detect a change and we're not already debouncing, start debouncing
-        debouncing = true;
-        debounce_key_states = read_keys();
-        debounce_ticks = 0;
-        LOG_INF("Starting debounce. key states: 0x%08X", debounce_key_states);
-    }
-
+    k_spinlock_key_t key = k_spin_lock(&key_state_lock);
+    uint32_t current_read_keys = read_keys(false);
     if (debouncing) {
-        if (debounce_key_states != read_keys()) {
-            debouncing = false;
+        if (debounce_key_states != current_read_keys) {
+            debounce_key_states = current_read_keys;
+            debounce_ticks = 0;
             LOG_INF("Detected key change, resetting debounce. key states: 0x%08X", debounce_key_states);
         } else {
             debounce_ticks++;
             if (debounce_ticks >= DEBOUNCE_TICKS) {
                 debouncing = false;
+                debounce_ticks = 0;
                 current_key_states = debounce_key_states;
                 LOG_INF("Debounce complete. key states: 0x%08X", current_key_states);
                 k_work_submit(&send_packet_work);
             }
         }
     }
+    k_spin_unlock(&key_state_lock, key);
 
-    check_inactivity_timeout();
+    check_inactivity_timeout(int_type);
 }
 
-void check_inactivity_timeout(void)
+void check_inactivity_timeout(nrfx_rtc_int_type_t int_type)
 {
-    if (read_keys() != 0) {
+    atomic_inc(&keepalive_ticks);
+    if (atomic_get(&keepalive_ticks) >= KEEPALIVE_TICKS) {
+        atomic_set(&keepalive_ticks, 0);
+        keepalive_handler(int_type);
+    }
+
+    if (read_keys(false) != 0) {
         // If any key is pressed, reset the inactivity counter and ensure we're in high power mode
-        inactivity_counter_ticks = 0;
-        LOG_INF("Activity detected. Resetting inactivity counter.");
+        atomic_set(&inactivity_counter_ticks, 0);
+        // LOG_INF("Activity detected. Resetting inactivity counter.");
         return;
     }
 
-    inactivity_counter_ticks += 1;
+    atomic_inc(&inactivity_counter_ticks);
 
-    if (inactivity_counter_ticks <= INACTIVITY_TIMEOUT_LIGHT_SLEEP_TICKS) {
+    if (atomic_get(&inactivity_counter_ticks) <= INACTIVITY_TIMEOUT_LIGHT_SLEEP_TICKS) {
         return;
     }
 
@@ -356,7 +450,7 @@ void check_inactivity_timeout(void)
         LOG_INF("Inactivity detected. Setting MEDIUM power mode.");
         nrf_gzll_set_tx_power(NRF_GZLL_TX_POWER_N8_DBM); // Reduce power to -4dBm
         current_power_mode = POWER_MODE_MEDIUM;
-    } else if (current_power_mode == POWER_MODE_MEDIUM && inactivity_counter_ticks >= INACTIVITY_TIMEOUT_HEAVY_SLEEP_TICKS) {
+    } else if (current_power_mode == POWER_MODE_MEDIUM && atomic_get(&inactivity_counter_ticks) >= INACTIVITY_TIMEOUT_HEAVY_SLEEP_TICKS) {
         // Reduce power to minimum -- wakes up on GPIO event
         LOG_INF("Extended inactivity detected. Setting SLEEP mode.");
         nrf_gzll_set_tx_power(NRF_GZLL_TX_POWER_N8_DBM);
@@ -402,39 +496,43 @@ static void send_packet_work_handler(struct k_work *work)
     
     char state_string[NUM_BUTTONS + 1];
 
+    k_spinlock_key_t key = k_spin_lock(&key_state_lock);
+    uint32_t key_states = current_key_states;
+    k_spin_unlock(&key_state_lock, key);
+    bool low_power = atomic_get(&low_power_alert);
     // Update the payload based on the current key states.
-    data_payload[0] = (current_key_states & 1<<S00) ? 1 : 0 << 7 |
-                       (current_key_states & 1<<S01) ? 1 : 0 << 6 | 
-                       (current_key_states & 1<<S02) ? 1 : 0 << 5 | 
-                       (current_key_states & 1<<S03) ? 1 : 0 << 4 | 
-                       (current_key_states & 1<<S04) ? 1 : 0 << 3 | 
-                       (current_key_states & 1<<S05) ? 1 : 0 << 2 | 
-                       (current_key_states & 1<<S06) ? 1 : 0 << 1 | 
-                       (current_key_states & 1<<S07) ? 1 : 0;
-    data_payload[1] = (current_key_states & 1<<S08) ? 1 : 0 << 7 | 
-                       (current_key_states & 1<<S09) ? 1 : 0 << 6 | 
-                       (current_key_states & 1<<S10) ? 1 : 0 << 5 |
-                       (current_key_states & 1<<S11) ? 1 : 0 << 4 |
-                       (current_key_states & 1<<S12) ? 1 : 0 << 3 |
-                       (current_key_states & 1<<S13) ? 1 : 0 << 2 |
-                       (current_key_states & 1<<S14) ? 1 : 0 << 1 |
-                       (current_key_states & 1<<S15) ? 1 : 0;
-    data_payload[2] = (current_key_states & 1<<S16) ? 1 : 0 << 7 |
-                       (current_key_states & 1<<S17) ? 1 : 0 << 6 |
-                       (current_key_states & 1<<S18) ? 1 : 0 << 5 |
-                       (current_key_states & 1<<S19) ? 1 : 0 << 4 |
-                       (current_key_states & 1<<S20) ? 1 : 0 << 3 |
-                       (current_key_states & 1<<S21) ? 1 : 0 << 2 |
-                       (low_power_alert) ? 1 : 0 << 1 | // Power alert bit
+    data_payload[0] = (key_states & 1<<S00) ? 1 : 0 << 7 |
+                       (key_states & 1<<S01) ? 1 : 0 << 6 | 
+                       (key_states & 1<<S02) ? 1 : 0 << 5 | 
+                       (key_states & 1<<S03) ? 1 : 0 << 4 |
+                       (key_states & 1<<S04) ? 1 : 0 << 3 | 
+                       (key_states & 1<<S05) ? 1 : 0 << 2 | 
+                       (key_states & 1<<S06) ? 1 : 0 << 1 | 
+                       (key_states & 1<<S07) ? 1 : 0;
+    data_payload[1] = (key_states & 1<<S08) ? 1 : 0 << 7 | 
+                       (key_states & 1<<S09) ? 1 : 0 << 6 | 
+                       (key_states & 1<<S10) ? 1 : 0 << 5 |
+                       (key_states & 1<<S11) ? 1 : 0 << 4 |
+                       (key_states & 1<<S12) ? 1 : 0 << 3 |
+                       (key_states & 1<<S13) ? 1 : 0 << 2 |
+                       (key_states & 1<<S14) ? 1 : 0 << 1 |
+                       (key_states & 1<<S15) ? 1 : 0;
+    data_payload[2] = (key_states & 1<<S16) ? 1 : 0 << 7 |
+                       (key_states & 1<<S17) ? 1 : 0 << 6 |
+                       (key_states & 1<<S18) ? 1 : 0 << 5 |
+                       (key_states & 1<<S19) ? 1 : 0 << 4 |
+                       (key_states & 1<<S20) ? 1 : 0 << 3 |
+                       (key_states & 1<<S21) ? 1 : 0 << 2 |
+                       (low_power) ? 1 : 0 << 1 | // Power alert bit
                        0; // Padding bit
 
     /* Build the log string based on the (correct) packet data */
-    for (int i = 0; i < NUM_BUTTONS; i++) {
+    for (int i = 0; i <= NUM_BUTTONS; i++) {
         state_string[i] = (get_keystate(data_payload, i)) ? '1' : '0';
     }
     state_string[NUM_BUTTONS] = '\0';
 
-    LOG_INF("Sending 17 bytes: [%s] (1=PRESSED)", state_string);
+    LOG_INF("Sending 3 bytes: [%s] (1=PRESSED)", state_string);
 
     /* Send the entire data_payload (NUM_BUTTONS bytes). */
     result_value = nrf_gzll_add_packet_to_tx_fifo(PIPE_NUMBER,
@@ -449,18 +547,20 @@ static void gzll_device_report_tx(bool success,
                   uint32_t pipe,
                   nrf_gzll_device_tx_info_t *tx_info)
 {
-    int err;
-    struct gzll_tx_result tx_result;
+    struct gzll_tx_result_node *node;
 
-    tx_result.success = success;
-    tx_result.pipe = pipe;
-    tx_result.info = *tx_info;
-    err = k_msgq_put(&gzll_msgq, &tx_result, K_NO_WAIT);
-    if (!err) {
-        k_work_submit(&gzll_results_work);
-    } else {
-        LOG_ERR("Cannot put TX result to message queue");
+    node = k_fifo_get(&gzll_tx_result_free_fifo, K_NO_WAIT);
+    if (node == NULL) {
+        LOG_ERR("No free GZLL TX result node available");
+        return;
     }
+
+    node->tx_result.success = success;
+    node->tx_result.pipe = pipe;
+    node->tx_result.info = *tx_info;
+
+    k_fifo_put(&gzll_tx_result_fifo, node);
+    k_work_submit(&gzll_results_work);
 }
 
 void nrf_gzll_device_tx_success(uint32_t pipe, nrf_gzll_device_tx_info_t tx_info)
@@ -484,10 +584,11 @@ void nrf_gzll_host_rx_data_ready(uint32_t pipe, nrf_gzll_host_rx_info_t rx_info)
 
 static void gzll_results_work_handler(struct k_work *work)
 {
-    struct gzll_tx_result tx_result;
+    struct gzll_tx_result_node *node;
 
-    while (!k_msgq_get(&gzll_msgq, &tx_result, K_NO_WAIT)) {
-        gzll_tx_result_handler(&tx_result);
+    while ((node = k_fifo_get(&gzll_tx_result_fifo, K_NO_WAIT)) != NULL) {
+        gzll_tx_result_handler(&node->tx_result);
+        k_fifo_put(&gzll_tx_result_free_fifo, node);
     }
 }
 

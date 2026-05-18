@@ -55,12 +55,12 @@
 #define R_S11 6
 
 // Third row, left to right
-#define R_S12 5
-#define R_S13 4
-#define R_S14 3
-#define R_S15 2
-#define R_S16 1
-#define R_S17 0
+#define R_S12 0
+#define R_S13 1
+#define R_S14 2
+#define R_S15 3
+#define R_S16 4
+#define R_S17 5
 
 // Fourth row, left to right
 #define R_S18 31
