@@ -328,7 +328,7 @@ void power_warn_event_handler(void)
 // void button_handler(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t trigger, void *p_context)
 void button_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
 {
-    LOG_INF("GPIO event detected on pins %u", pins);
+    LOG_INF("GPIO event detected on pins 0x%08X", pins);
     // This will be called on any button press due to our GPIOTE configuration
     // We can use this to wake up from sleep immediately without waiting for the next RTC tick
     if (current_power_mode == POWER_MODE_SLEEP) {
