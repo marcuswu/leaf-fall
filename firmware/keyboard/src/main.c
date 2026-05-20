@@ -39,12 +39,11 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG); // Use DBG for RTT logs
 #define LOW_POWER_POF_THRESHOLD NRF_POWER_POFTHR_V19
 static atomic_t low_power_alert = ATOMIC_INIT(0);
 
-// const struct device *port = DEVICE_DT_GET(DT_NODELABEL(gpio0));
+const struct device *port = DEVICE_DT_GET(DT_NODELABEL(gpio0));
 
 static nrfx_rtc_t rtc = NRFX_RTC_INSTANCE(1);
 #define GPIOTE_INST NRF_DT_GPIOTE_INST(DT_ALIAS(sw0), gpios)
 #define GPIOTE_NODE DT_NODELABEL(__CONCAT(gpiote, GPIOTE_INST))
-static nrfx_gpiote_t *gpiote_instance = &GPIOTE_NRFX_INST_BY_NODE(GPIOTE_NODE);
 struct gpio_callback gpio_callback_struct;
 
 /* Power state machine */
@@ -58,7 +57,6 @@ static atomic_t inactivity_counter_ticks = ATOMIC_INIT(0);
 
 static uint32_t debounce_ticks = 0;
 static atomic_t keepalive_ticks = ATOMIC_INIT(0);
-static atomic_t zero_key_state_ticks = ATOMIC_INIT(0);
 static volatile bool debouncing = false;
 
 /*
@@ -165,7 +163,7 @@ static inline uint32_t read_port_keys(bool print_keys)
     // nrf_gpio_port_in_read() can read the entire port of GPIOs at once
     // We can use this to read all buttons in one go, then update the keystate buffer
     uint32_t raw_input = 0;
-    int result = gpio_port_get(buttons[0].port, &raw_input);
+    int result = gpio_port_get(port, &raw_input);
     if (result != 0) {
         LOG_ERR("Failed to read GPIO port: %d", result);
         return 0; // Return all keys unpressed on error
@@ -268,10 +266,17 @@ static void manual_isr_setup()
 // Initialize GPIOTE to wake up on button presses if we are in sleep mode
 void gpiote_config(void)
 {
+    if (!device_is_ready(port)) {
+        LOG_ERR("GPIO port is not ready");
+    }
     // New implementation using Zephyr's GPIO API with interrupts for simplicity and reliability
     for (int i = 0; i < NUM_BUTTONS; i++) {
-        // int err = gpio_pin_configure(buttons[i].port, buttons[i].pin, GPIO_INPUT | GPIO_PULL_UP | GPIO_ACTIVE_LOW);
-        int err = gpio_pin_configure_dt(&buttons[i], GPIO_INPUT | GPIO_PULL_UP | GPIO_ACTIVE_LOW);
+        if (!gpio_is_ready_dt(&buttons[i])) {
+            LOG_ERR("GPIO device for button %d is not ready", i);
+            continue;
+        }
+
+        int err = gpio_pin_configure(buttons[i].port, buttons[i].pin, GPIO_INPUT | GPIO_PULL_UP | GPIO_ACTIVE_LOW);
         if (err != 0) {
             LOG_ERR("Failed to configure GPIO pin %d: %d", buttons[i].pin, err);
             continue;
@@ -285,7 +290,6 @@ void gpiote_config(void)
             LOG_ERR("Failed to configure interrupt for GPIO pin %d: %d", buttons[i].pin, err);
             continue;
         }
-        LOG_INF("Successfully configured interrupt for GPIO pin %d", buttons[i].pin);
     }
     // Set the same button_handler for all button interrupts
     gpio_init_callback(&gpio_callback_struct, button_handler, INPUT_MASK);
@@ -326,7 +330,7 @@ void power_warn_event_handler(void)
 }
 
 // void button_handler(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t trigger, void *p_context)
-void button_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins)
+void button_handler(const struct device *port, struct gpio_callback *cb, uint32_t pins)
 {
     LOG_INF("GPIO event detected on pins 0x%08X", pins);
     // This will be called on any button press due to our GPIOTE configuration
@@ -367,8 +371,8 @@ void debounce_handler(nrfx_rtc_int_type_t int_type)
     // LOG_INF("debounce handler. key states: 0x%08X", debounce_key_states);
 
     k_spinlock_key_t key = k_spin_lock(&key_state_lock);
-    uint32_t current_read_keys = read_keys(false);
     if (debouncing) {
+        uint32_t current_read_keys = read_keys(true);
         if (debounce_key_states != current_read_keys) {
             debounce_key_states = current_read_keys;
             debounce_ticks = 0;

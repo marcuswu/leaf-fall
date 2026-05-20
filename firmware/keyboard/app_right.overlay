@@ -22,6 +22,25 @@
         sw19 = &button19;
         sw20 = &button20;
         sw21 = &button21;
+        /delete-property/ led0;
+        /delete-property/ led1;
+        /delete-property/ led2;
+        /delete-property/ led3;
+        /delete-property/ pwm_led0;
+        /delete-property/ mcuboot-button0;
+        /delete-property/ mcuboot-led0;
+        /delete-property/ watchdog0;
+    };
+
+    leds {
+        /delete-property/ led0;
+        /delete-property/ led1;
+        /delete-property/ led2;
+        /delete-property/ led3;
+    };
+
+    pwmleds {
+        /delete-property/ pwm_led0;
     };
 
     buttons {
@@ -125,6 +144,11 @@
     };
 };
 
+&uicr {
+    nfct-pins-as-gpios;
+    /delete-property/ gpio-as-nreset;
+};
+
 &gpiote {
     status = "okay";
 };
@@ -132,6 +156,14 @@
 &gpio0 {
     sense-edge-mask = < 0xF01FC7FF >;
     status = "okay";
+};
+
+&adc {
+    status = "disabled";
+};
+
+&nfct {
+    status = "disabled";
 };
 
 &uart0 {
@@ -143,6 +175,14 @@
 };
 
 &i2c1 {
+    status = "disabled";
+};
+
+&pwm0 {
+    status = "disabled";
+};
+
+&spi0 {
     status = "disabled";
 };
 
