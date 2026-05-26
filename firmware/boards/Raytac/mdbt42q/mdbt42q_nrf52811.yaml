@@ -1,0 +1,11 @@
+identifier: mdbt42q/nrf52811
+name: Raytac mdbt42q
+vendor: Raytac
+type: mcu
+arch: arm
+ram: 24
+flash: 192
+toolchain:
+  - zephyr
+supported:
+  - gpio

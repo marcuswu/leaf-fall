@@ -1,6 +1,6 @@
 /dts-v1/;
-#include <nordic/nrf52832_qfaa.dtsi>
-#include "mdbt42q-pinctrl.dtsi"
+#include <nordic/nrf52811_qfaa.dtsi>
+#include "mdbt42q_nrf52811-pinctrl.dtsi"
 #include <zephyr/dt-bindings/input/input-event-codes.h>
 
 / {
@@ -20,7 +20,7 @@
 };
 
 &reg {
-	regulator-initial-mode = <NRF5X_REG_MODE_LDO>;
+	regulator-initial-mode = <NRF5X_REG_MODE_DCDC>;
 	status = "okay";
 };
 
@@ -54,15 +54,15 @@
 		};
 		slot0_partition: partition@c000 {
 				label = "image-0";
-				reg = <0x0000C000 0x37000>;
+				reg = <0x0000C000 0xe0000>;
 		};
-		slot1_partition: partition@43000 {
+		slot1_partition: partition@1a000 {
 				label = "image-1";
-				reg = <0x00043000 0x37000>;
+				reg = <0x0001a000 0xe0000>;
 		};
-		storage_partition: partition@7a000 {
+		storage_partition: partition@28000 {
 				label = "storage";
-				reg = <0x0007a000 0x00006000>;
+				reg = <0x00028000 0x00008000>;
 		};
 	};
 };

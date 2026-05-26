@@ -3,3 +3,5 @@ board:
   vendor: Raytac
   socs:
     - name: nrf52832
+    - name: nrf52811
+    - name: nrf52810

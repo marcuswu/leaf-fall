@@ -1,4 +1,5 @@
 #include <zephyr/kernel.h>
+#include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/irq.h>
 #include <zephyr/logging/log.h>
@@ -6,9 +7,7 @@
 #include <zephyr/spinlock.h>
 #include <string.h>
 
-#include <gpiote_nrfx.h>
 #include <nrfx_power.h>
-#include <nrfx_gpiote.h>
 #include <nrfx_rtc.h>
 #include <nrf_gzll.h>
 #include <gzll_glue.h>
@@ -143,7 +142,7 @@ static inline uint32_t read_all_keys(bool print_keys)
     k_spinlock_key_t key = k_spin_lock(&key_read_lock);
     uint32_t result = 0;
     for (int i = 0; i < NUM_BUTTONS; i++) {
-        int gpio_value = gpio_pin_get(buttons[i].port, buttons[i].pin);
+        int gpio_value = gpio_pin_get_dt(&buttons[i]);
         if (gpio_value < 0) {
             LOG_ERR("Failed to read GPIO pin %d: %d", i, gpio_value);
             gpio_value = 0; // Treat as unpressed on error
@@ -264,7 +263,7 @@ static void manual_isr_setup()
 }
 
 // Initialize GPIOTE to wake up on button presses if we are in sleep mode
-void gpiote_config(void)
+void gpio_config(void)
 {
     if (!device_is_ready(port)) {
         LOG_ERR("GPIO port is not ready");
@@ -276,7 +275,7 @@ void gpiote_config(void)
             continue;
         }
 
-        int err = gpio_pin_configure(buttons[i].port, buttons[i].pin, GPIO_INPUT | GPIO_PULL_UP | GPIO_ACTIVE_LOW);
+        int err = gpio_pin_configure_dt(&buttons[i], GPIO_INPUT);
         if (err != 0) {
             LOG_ERR("Failed to configure GPIO pin %d: %d", buttons[i].pin, err);
             continue;
@@ -293,7 +292,7 @@ void gpiote_config(void)
     }
     // Set the same button_handler for all button interrupts
     gpio_init_callback(&gpio_callback_struct, button_handler, INPUT_MASK);
-    gpio_add_callback(buttons[0].port, &gpio_callback_struct);
+    gpio_add_callback(port, &gpio_callback_struct);
 }
 
 int main(void)
@@ -308,7 +307,7 @@ int main(void)
     LOG_INF("Configuring RTC");
     rtc_config();
     LOG_INF("Configuring GPIOTE");
-    gpiote_config();
+    gpio_config();
     manual_isr_setup();
 
     /*
