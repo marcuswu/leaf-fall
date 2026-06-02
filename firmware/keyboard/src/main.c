@@ -1,6 +1,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/counter.h>
 #include <zephyr/irq.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/atomic.h>
@@ -8,7 +9,6 @@
 #include <string.h>
 
 #include <nrfx_power.h>
-#include <nrfx_rtc.h>
 #include <nrf_gzll.h>
 #include <gzll_glue.h>
 #include "leaf_fold.h"
@@ -31,7 +31,6 @@ LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG); // Use DBG for RTT logs
 #define INACTIVITY_TIMEOUT_LIGHT_SLEEP_TICKS 1500  // ~1.5 seconds
 #define INACTIVITY_TIMEOUT_HEAVY_SLEEP_TICKS 10000 // ~10 seconds
 
-#define DEBOUNCE_FREQUENCY_HZ 1000 // 1000Hz debounce ticks
 #define KEEPALIVE_TICKS 1250 // 8Hz ticks for keepalive packets, but implemented as debounce ticks
 
 /* CR2032 low-power threshold and power alert state */
@@ -40,9 +39,7 @@ static atomic_t low_power_alert = ATOMIC_INIT(0);
 
 const struct device *port = DEVICE_DT_GET(DT_NODELABEL(gpio0));
 
-static nrfx_rtc_t rtc = NRFX_RTC_INSTANCE(1);
-#define GPIOTE_INST NRF_DT_GPIOTE_INST(DT_ALIAS(sw0), gpios)
-#define GPIOTE_NODE DT_NODELABEL(__CONCAT(gpiote, GPIOTE_INST))
+const struct device *counter_dev = DEVICE_DT_GET(DT_NODELABEL(timer0));
 struct gpio_callback gpio_callback_struct;
 
 /* Power state machine */
@@ -100,9 +97,6 @@ struct gzll_tx_result {
     nrf_gzll_device_tx_info_t info;
 };
 
-/* Payload to send to Host is now NUM_BUTTONS bytes long. */
-static uint8_t data_payload[TX_PAYLOAD_LENGTH];
-
 /* Placeholder for received ACK payloads from Host. */
 static uint8_t ack_payload[NRF_GZLL_CONST_MAX_PAYLOAD_LENGTH];
 
@@ -127,9 +121,8 @@ static void send_packet_work_handler(struct k_work *work);
 // Interrupt handler prototypes
 void button_handler(const struct device *dev, struct gpio_callback *cb, uint32_t pins);
 void power_warn_event_handler(void);
-// void keepalive_handler(nrfx_rtc_int_type_t int_type);
-void debounce_handler(nrfx_rtc_int_type_t int_type);
-void check_inactivity_timeout(nrfx_rtc_int_type_t int_type);
+void debounce_handler(const struct device *dev, void *user_data);
+void check_inactivity_timeout();
 
 // power failure warning configuration
 static nrfx_power_pofwarn_config_t pof_config = {
@@ -137,26 +130,7 @@ static nrfx_power_pofwarn_config_t pof_config = {
     .thr = LOW_POWER_POF_THRESHOLD
 };
 
-static inline uint32_t read_all_keys(bool print_keys)
-{
-    k_spinlock_key_t key = k_spin_lock(&key_read_lock);
-    uint32_t result = 0;
-    for (int i = 0; i < NUM_BUTTONS; i++) {
-        int gpio_value = gpio_pin_get_dt(&buttons[i]);
-        if (gpio_value < 0) {
-            LOG_ERR("Failed to read GPIO pin %d: %d", i, gpio_value);
-            gpio_value = 0; // Treat as unpressed on error
-        }
-        result |= (gpio_value << (buttons[i].pin)); // Use the pin number as the bit index
-    }
-    if (print_keys) {
-        LOG_INF("read key states: 0x%08X", result);
-    }
-    k_spin_unlock(&key_read_lock, key);
-    return result;
-}
-
-static inline uint32_t read_port_keys(bool print_keys)
+static inline uint32_t read_keys(bool print_keys)
 {
     k_spinlock_key_t key = k_spin_lock(&key_read_lock);
     // nrf_gpio_port_in_read() can read the entire port of GPIOs at once
@@ -168,24 +142,15 @@ static inline uint32_t read_port_keys(bool print_keys)
         return 0; // Return all keys unpressed on error
     }
 
+    if (print_keys) {
+        LOG_INF("Raw GPIO before mask: 0x%08X; INPUT_MASK: 0x%08X", raw_input, INPUT_MASK);
+    }
     result = raw_input & INPUT_MASK;
     if (print_keys) {
-        LOG_INF("Raw GPIO data: 0x%08X; Masked read key states: 0x%08X", raw_input, result);
+        LOG_INF("Masked read key states: 0x%08X", result);
     }
     k_spin_unlock(&key_read_lock, key);
     return result;
-}
-
-// Read the state of all buttons and return as a bitfield
-static uint32_t read_keys(bool print_keys)
-{
-    #if 0
-    // read each pin individually
-    return read_all_keys(print_keys);
-    #else
-    // read the entire port at once
-    return read_port_keys(print_keys);
-    #endif
 }
 
 // Initialize pof event configuration
@@ -237,29 +202,31 @@ void gazell_init() {
     LOG_INF("Gzll device started in HIGH POWER mode (Pipe %d).", PIPE_NUMBER);
 }
 
-// Initialize Real Time Counter to handle key state changes, debouncing, and inactivity timeouts
-void rtc_config(void)
+// Initialize counter to handle key state changes, debouncing, and inactivity timeouts
+void counter_config(void)
 {
-    uint32_t err;
-    nrfx_rtc_config_t rtc_debounce_config = {
-        .prescaler = NRF_RTC_FREQ_TO_PRESCALER(1000), // 1000 Hz to optimize response time
-        .interrupt_priority = NRFX_RTC_DEFAULT_CONFIG_IRQ_PRIORITY,
-        .tick_latency = NRFX_RTC_US_TO_TICKS(2000, 32768), // 2ms max latency
-        .reliable = false
+    struct counter_top_cfg counter_config = {
+        .callback = debounce_handler,
+        .ticks = 16000, // 16Mhz clock so 16000 ticks = 1 ms
+        .user_data = NULL,
+        .flags = COUNTER_TOP_CFG_RESET_WHEN_LATE | COUNTER_CONFIG_INFO_COUNT_UP
     };
 
-    // debounce handler handles recognizing and sending key state changes and inactivity management
-    err = nrfx_rtc_init(&rtc, &rtc_debounce_config, debounce_handler);
-    if (err != 0) {
-        LOG_ERR("Failed to initialize debounce RTC: %d", err);
+    if (!device_is_ready(counter_dev)) {
+        LOG_ERR("Counter device is not ready");
+        return;
     }
-    nrfx_rtc_tick_enable(&rtc, true);
-}
 
-static void manual_isr_setup()
-{
-    IRQ_DIRECT_CONNECT(RTC1_IRQn, 0, nrfx_rtc_1_irq_handler, 0);
-    irq_enable(RTC1_IRQn);
+    int err = counter_set_top_value(counter_dev, &counter_config);
+    if (err < 0) {
+        LOG_ERR("Counter device failed to set: %d", err);
+        return;
+    }
+    counter_start(counter_dev);
+    if (err < 0) {
+        LOG_ERR("Counter device failed to start: %d", err);
+        return;
+    }
 }
 
 // Initialize GPIOTE to wake up on button presses if we are in sleep mode
@@ -280,11 +247,11 @@ void gpio_config(void)
             LOG_ERR("Failed to configure GPIO pin %d: %d", buttons[i].pin, err);
             continue;
         }
+        LOG_INF("Configured button %d pin %d flags=0x%08X", i, buttons[i].pin, buttons[i].dt_flags);
         // Set up the interrupt for every pin. NRF chips can only do this on 6 pins unless using edge sense,
         // so be sure to set this in your overlay for your gpio (replacing the mask with the pins you need):
         // sense-edge-mask = < 0xF01FC7FF >;
         err = gpio_pin_interrupt_configure_dt(&buttons[i], GPIO_INT_EDGE_BOTH);
-        // err = gpio_pin_interrupt_configure(buttons[i].port, buttons[i].pin, GPIO_INT_EDGE_BOTH);
         if (err < 0) {
             LOG_ERR("Failed to configure interrupt for GPIO pin %d: %d", buttons[i].pin, err);
             continue;
@@ -301,14 +268,14 @@ int main(void)
     LOG_INF("Starting Leaf Fall Keyboard...");
     LOG_INF("using input mask: 0x%08X", INPUT_MASK);
     LOG_INF("Setting up POF warning");
-    power_failure_init();
+    // power_failure_init();
     LOG_INF("Initializing Gazell");
     gazell_init();
-    LOG_INF("Configuring RTC");
-    rtc_config();
+    LOG_INF("Configuring Counter");
+    counter_config();
     LOG_INF("Configuring GPIOTE");
     gpio_config();
-    manual_isr_setup();
+    // manual_isr_setup();
 
     /*
      * The main loop just waits for events
@@ -328,7 +295,6 @@ void power_warn_event_handler(void)
     atomic_set(&low_power_alert, 1);
 }
 
-// void button_handler(nrfx_gpiote_pin_t pin, nrfx_gpiote_trigger_t trigger, void *p_context)
 void button_handler(const struct device *port, struct gpio_callback *cb, uint32_t pins)
 {
     LOG_INF("GPIO event detected on pins 0x%08X", pins);
@@ -339,7 +305,7 @@ void button_handler(const struct device *port, struct gpio_callback *cb, uint32_
         nrf_gzll_enable();
         nrf_gzll_set_tx_power(NRF_GZLL_TX_POWER_0_DBM);
         current_power_mode = POWER_MODE_HIGH;
-        nrfx_rtc_enable(&rtc);
+        counter_start(counter_dev);
     }
     if (current_power_mode == POWER_MODE_MEDIUM) {
         LOG_INF("Activity detected from GPIO event. Setting HIGH power mode.");
@@ -358,13 +324,13 @@ void button_handler(const struct device *port, struct gpio_callback *cb, uint32_
 /* ---- Tick Handlers ---- */
 
 // Send key states at 8hz keepalive interval even w/o key changes
-void keepalive_handler(nrfx_rtc_int_type_t int_type)
+void keepalive_handler()
 {
     k_work_submit(&send_packet_work);
 }
 
 // Handle debouncing key presses and sleep logic for inactivity
-void debounce_handler(nrfx_rtc_int_type_t int_type)
+void debounce_handler(const struct device *dev, void *user_data)
 {
     // check to see if we need to run the keepalive handler
     // LOG_INF("debounce handler. key states: 0x%08X", debounce_key_states);
@@ -389,15 +355,15 @@ void debounce_handler(nrfx_rtc_int_type_t int_type)
     }
     k_spin_unlock(&key_state_lock, key);
 
-    check_inactivity_timeout(int_type);
+    check_inactivity_timeout();
 }
 
-void check_inactivity_timeout(nrfx_rtc_int_type_t int_type)
+void check_inactivity_timeout()
 {
     atomic_inc(&keepalive_ticks);
     if (atomic_get(&keepalive_ticks) >= KEEPALIVE_TICKS) {
         atomic_set(&keepalive_ticks, 0);
-        keepalive_handler(int_type);
+        keepalive_handler();
     }
 
     if (read_keys(false) != 0) {
@@ -424,7 +390,7 @@ void check_inactivity_timeout(nrfx_rtc_int_type_t int_type)
         nrf_gzll_set_tx_power(NRF_GZLL_TX_POWER_N8_DBM);
         nrf_gzll_disable();
         current_power_mode = POWER_MODE_SLEEP;
-        nrfx_rtc_disable(&rtc);
+        counter_stop(counter_dev);
     }
 
 }
@@ -445,6 +411,8 @@ static void send_packet_work_handler(struct k_work *work)
 {
     ARG_UNUSED(work);
     bool result_value;
+    /* Payload to send to Host is now NUM_BUTTONS bytes long. */
+    uint8_t data_payload[TX_PAYLOAD_LENGTH] = {0}; // Initialize all bytes to 0
 
     // If we're asleep, wake up and set to high power
     if (current_power_mode == POWER_MODE_SLEEP) {
@@ -469,30 +437,30 @@ static void send_packet_work_handler(struct k_work *work)
     k_spin_unlock(&key_state_lock, key);
     bool low_power = atomic_get(&low_power_alert);
     // Update the payload based on the current key states.
-    data_payload[0] = (key_states & 1<<S00) ? 1 : 0 << 7 |
-                       (key_states & 1<<S01) ? 1 : 0 << 6 | 
-                       (key_states & 1<<S02) ? 1 : 0 << 5 | 
-                       (key_states & 1<<S03) ? 1 : 0 << 4 |
-                       (key_states & 1<<S04) ? 1 : 0 << 3 | 
-                       (key_states & 1<<S05) ? 1 : 0 << 2 | 
-                       (key_states & 1<<S06) ? 1 : 0 << 1 | 
-                       (key_states & 1<<S07) ? 1 : 0;
-    data_payload[1] = (key_states & 1<<S08) ? 1 : 0 << 7 | 
-                       (key_states & 1<<S09) ? 1 : 0 << 6 | 
-                       (key_states & 1<<S10) ? 1 : 0 << 5 |
-                       (key_states & 1<<S11) ? 1 : 0 << 4 |
-                       (key_states & 1<<S12) ? 1 : 0 << 3 |
-                       (key_states & 1<<S13) ? 1 : 0 << 2 |
-                       (key_states & 1<<S14) ? 1 : 0 << 1 |
-                       (key_states & 1<<S15) ? 1 : 0;
-    data_payload[2] = (key_states & 1<<S16) ? 1 : 0 << 7 |
-                       (key_states & 1<<S17) ? 1 : 0 << 6 |
-                       (key_states & 1<<S18) ? 1 : 0 << 5 |
-                       (key_states & 1<<S19) ? 1 : 0 << 4 |
-                       (key_states & 1<<S20) ? 1 : 0 << 3 |
-                       (key_states & 1<<S21) ? 1 : 0 << 2 |
-                       (low_power) ? 1 : 0 << 1 | // Power alert bit
-                       0; // Padding bit
+    data_payload[0] = (key_states & (1<<S00)) ? 1 : (0 << 7) |
+                       (key_states & (1<<S01)) ? 1 : (0 << 6) | 
+                       (key_states & (1<<S02)) ? 1 : (0 << 5) | 
+                       (key_states & (1<<S03)) ? 1 : (0 << 4) |
+                       (key_states & (1<<S04)) ? 1 : (0 << 3) | 
+                       (key_states & (1<<S05)) ? 1 : (0 << 2) |
+                       (key_states & (1<<S06)) ? 1 : (0 << 1) | 
+                       (key_states & (1<<S07)) ? 1 : (0);
+    data_payload[1] = (key_states & (1<<S08)) ? 1 : (0 << 7) | 
+                       (key_states & (1<<S09)) ? 1 : (0 << 6) | 
+                       (key_states & (1<<S10)) ? 1 : (0 << 5) |
+                       (key_states & (1<<S11)) ? 1 : (0 << 4) |
+                       (key_states & (1<<S12)) ? 1 : (0 << 3) |
+                       (key_states & (1<<S13)) ? 1 : (0 << 2) |
+                       (key_states & (1<<S14)) ? 1 : (0 << 1) |
+                       (key_states & (1<<S15)) ? 1 : (0);
+    data_payload[2] = (key_states & (1<<S16)) ? 1 : (0 << 7) |
+                       (key_states & (1<<S17)) ? 1 : (0 << 6) |
+                       (key_states & (1<<S18)) ? 1 : (0 << 5) |
+                       (key_states & (1<<S19)) ? 1 : (0 << 4) |
+                       (key_states & (1<<S20)) ? 1 : (0 << 3) |
+                       (key_states & (1<<S21)) ? 1 : (0 << 2) |
+                       (low_power) ? 1 : (0 << 1) | // Power alert bit
+                       (0); // Padding bit
 
     /* Build the log string based on the (correct) packet data */
     for (int i = 0; i <= NUM_BUTTONS; i++) {

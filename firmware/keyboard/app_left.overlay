@@ -49,7 +49,7 @@
             label = "Button 4";
         };
         button5: button_5 {
-            gpios = <&gpio0 35 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+            gpios = <&gpio0 25 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
             label = "Button 5";
         };
 
@@ -137,41 +137,8 @@
 
 &gpio0 {
     sense-edge-mask = < 0xFFFFFFFF >;
+};
+
+&timer0 {
     status = "okay";
-};
-
-&adc {
-    status = "disabled";
-};
-
-&nfct {
-    status = "disabled";
-};
-
-&uart0 {
-    status = "disabled";
-};
-
-&i2c0 {
-    status = "disabled";
-};
-
-&i2c1 {
-    status = "disabled";
-};
-
-&pwm0 {
-    status = "disabled";
-};
-
-&spi0 {
-    status = "disabled";
-};
-
-&spi1 {
-    status = "disabled";
-};
-
-&spi2 {
-    status = "disabled";
 };

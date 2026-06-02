@@ -155,41 +155,4 @@
 
 &gpio0 {
     sense-edge-mask = < 0xF01FC7FF >;
-    status = "okay";
-};
-
-&adc {
-    status = "disabled";
-};
-
-&nfct {
-    status = "disabled";
-};
-
-&uart0 {
-    status = "disabled";
-};
-
-&i2c0 {
-    status = "disabled";
-};
-
-&i2c1 {
-    status = "disabled";
-};
-
-&pwm0 {
-    status = "disabled";
-};
-
-&spi0 {
-    status = "disabled";
-};
-
-&spi1 {
-    status = "disabled";
-};
-
-&spi2 {
-    status = "disabled";
 };

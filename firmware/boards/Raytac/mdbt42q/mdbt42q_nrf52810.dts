@@ -66,3 +66,32 @@
 		};
 	};
 };
+
+&uicr {
+    nfct-pins-as-gpios;
+    /delete-property/ gpio-as-nreset;
+};
+
+&gpio0 {
+    status = "okay";
+};
+
+&adc {
+    status = "disabled";
+};
+
+&uart0 {
+    status = "disabled";
+};
+
+&i2c0 {
+    status = "disabled";
+};
+
+&pwm0 {
+    status = "disabled";
+};
+
+&spi0 {
+    status = "disabled";
+};
