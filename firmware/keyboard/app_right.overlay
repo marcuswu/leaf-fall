@@ -154,5 +154,9 @@
 };
 
 &gpio0 {
-    sense-edge-mask = < 0xF01FC7FF >;
+    sense-edge-mask = < 0xFFFFFFFF >;
+};
+
+&timer0 {
+    status = "okay";
 };
