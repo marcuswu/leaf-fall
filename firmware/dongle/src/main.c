@@ -7,6 +7,10 @@
 #include <gzll_glue.h>
 
 #include <zephyr/sys/util.h>
+#include <zephyr/sys/ring_buffer.h>
+#include <zephyr/logging/log.h>
+
+LOG_MODULE_REGISTER(main, LOG_LEVEL_DBG); // Use DBG for RTT logs
 
 #define KEYS_PER_ROW_HALF 6
 #define KEYS_PER_ROW_FULL (KEYS_PER_ROW_HALF * 2)
@@ -36,55 +40,89 @@ static volatile bool packet_received_right = false;
 static const struct device *uart_dev = DEVICE_DT_GET(UART_DEVICE_NODE);
 static const uint8_t STOP_BYTE = END_OF_FRAME_BYTE; // Arbitrary stop byte to indicate end of frame
 
+struct gzll_rx_result {
+    uint32_t pipe;
+    nrf_gzll_host_rx_info_t info;
+};
+
+// Structure to hold packet data for keystate update thread
+struct keystate_packet {
+    uint32_t pipe;
+    uint8_t data_payload[NRF_GZLL_CONST_MAX_PAYLOAD_LENGTH];
+    uint32_t payload_length;
+};
+
 // key state buffer
-static volatile uint8_t keystate[TOTAL_DATA_BYTES] = {0}; // Buffer to hold key states received from left half of keyboard
+static struct k_spinlock key_state_lock;
+static uint8_t keystate[TOTAL_DATA_BYTES] = {0}; // Buffer to hold key states received from left half of keyboard
+
+// Message queue for keystate updates
+K_MSGQ_DEFINE(keystate_msgq,
+              sizeof(struct keystate_packet),
+              8,
+              4);
+
+K_MSGQ_DEFINE(gzll_msgq,
+	      sizeof(struct gzll_rx_result),
+	      1,
+	      sizeof(uint32_t));
+
+static K_SEM_DEFINE(main_sem, 0, 1);
+static struct k_work gzll_work;
+
+// Keystate processing thread stack and thread
+#define KEYSTATE_THREAD_STACK_SIZE 512
+K_THREAD_STACK_DEFINE(keystate_thread_stack, KEYSTATE_THREAD_STACK_SIZE);
+#define UART_THREAD_STACK_SIZE 1024
+K_THREAD_STACK_DEFINE(uart_thread_stack, UART_THREAD_STACK_SIZE);
+static struct k_thread keystate_thread;
+static struct k_thread uart_thread;
+
+static void keystate_thread_handler(void *p1, void *p2, void *p3);
+static void uart_thread_handler(void *p1, void *p2, void *p3);
+static void process_keystate_packet(struct keystate_packet *packet);
 
 static bool initialize_uart(void);
 static bool initialize_gazell(void);
-static void fetch_gazell_packet(uint32_t pipe);
+static void fetch_gazell_packet(struct gzll_rx_result *rx_result);
 void update_keystate(uint32_t pipe, uint8_t *data_payload, size_t row, size_t column);
+
+static void gzll_work_handler(struct k_work *work);
 
 int main(void)
 {
-    if (!initialize_uart())
+    uint8_t rx_byte;
+    k_work_init(&gzll_work, gzll_work_handler);
+
+    // Start keystate processing thread
+    k_thread_create(&keystate_thread, keystate_thread_stack,
+                    KEYSTATE_THREAD_STACK_SIZE,
+                    keystate_thread_handler,
+                    NULL, NULL, NULL,
+                    K_PRIO_PREEMPT(0), 0, K_NO_WAIT);
+
+    // Start UART processing thread
+    k_thread_create(&uart_thread, uart_thread_stack,
+                    UART_THREAD_STACK_SIZE,
+                    uart_thread_handler,
+                    NULL, NULL, NULL,
+                    K_PRIO_PREEMPT(0), 0, K_NO_WAIT);
+
+    if (!initialize_gazell())
     {
         return 0;
     }
-
-    if (!initialize_gazell())
+    if (!initialize_uart())
     {
         return 0;
     }
 
     while (true)
     {
-        // Check for new packets from left and right halves of keyboard
-        if (packet_received_left)
-        {
-            packet_received_left = false;
-            fetch_gazell_packet(PIPE_NUMBER_LEFT);
+        if (k_sem_take(&main_sem, K_FOREVER)) {
+            continue;
         }
-        if (packet_received_right)
-        {
-            packet_received_right = false;
-            fetch_gazell_packet(PIPE_NUMBER_RIGHT);
-        }
-
-        // Check for poll request from host
-        uint8_t rx_byte;
-        if (uart_poll_in(uart_dev, &rx_byte) == 0 && rx_byte == 's')
-        {
-            // Send keystates to host in a single frame
-            uint8_t tx_frame[TOTAL_DATA_BYTES + 1]; // +1 for stop byte
-            memcpy(tx_frame, keystate, TOTAL_DATA_BYTES);
-            tx_frame[TOTAL_DATA_BYTES] = STOP_BYTE; // Append stop byte to indicate end of frame
-            for (size_t i = 0; i < sizeof(tx_frame); i++)
-            {
-                uart_poll_out(uart_dev, tx_frame[i]);
-            }
-        }
-
-        k_sleep(K_USEC(10)); // Allow UART buffers to clear
+        k_sleep(K_USEC(10));
     }
 }
 
@@ -119,13 +157,13 @@ static bool initialize_gazell(void)
 
     // Load ACK payload into TX queue for both pipes
     ack_payload[0] = 0xFF; // Arbitrary ACK payload
-    // ack left pipe
-    success = nrf_gzll_add_packet_to_tx_fifo(PIPE_NUMBER_LEFT, ack_payload, TX_PAYLOAD_LENGTH);
+    // ack right pipe
+    success = nrf_gzll_add_packet_to_tx_fifo(PIPE_NUMBER_RIGHT, ack_payload, TX_PAYLOAD_LENGTH);
     if (!success) {
         return false;
     }
-    // ack right pipe
-    success = nrf_gzll_add_packet_to_tx_fifo(PIPE_NUMBER_RIGHT, ack_payload, TX_PAYLOAD_LENGTH);
+    // ack left pipe
+    success = nrf_gzll_add_packet_to_tx_fifo(PIPE_NUMBER_LEFT, ack_payload, TX_PAYLOAD_LENGTH);
     if (!success) {
         return false;
     }
@@ -141,41 +179,39 @@ static bool initialize_gazell(void)
 
 void nrf_gzll_host_rx_data_ready(uint32_t pipe, nrf_gzll_host_rx_info_t rx_info)
 {
-    if (pipe == PIPE_NUMBER_LEFT) {
-        packet_received_left = true;
-    } else if (pipe == PIPE_NUMBER_RIGHT) {
-        packet_received_right = true;
+    int err;
+    struct gzll_rx_result rx_result;
+
+    rx_result.pipe = pipe;
+    rx_result.info = rx_info;
+    err = k_msgq_put(&gzll_msgq, &rx_result, K_NO_WAIT);
+    if (err == 0) {
+        // Handle error
+        k_work_submit(&gzll_work);
     }
 }
 
-static void fetch_gazell_packet(uint32_t pipe)
+static void fetch_gazell_packet(struct gzll_rx_result *rx_result)
 {
-    uint8_t data_payload[HALF_PAYLOAD_LENGTH];
-    uint32_t payload_length = HALF_PAYLOAD_LENGTH;
+    struct keystate_packet pkt;
+    uint32_t payload_length = NRF_GZLL_CONST_MAX_PAYLOAD_LENGTH;
 
     // Fetch packet from Gazell RX FIFO
-    bool success = nrf_gzll_fetch_packet_from_rx_fifo(pipe, data_payload, &payload_length);
+    bool success = nrf_gzll_fetch_packet_from_rx_fifo(rx_result->pipe, pkt.data_payload, &payload_length);
     if (!success) {
-        return;
+        LOG_INF("RX fifo error");
+    } else if (payload_length > 0) {
+        LOG_INF("Received data on pipe %u: 0x%02x 0x%02x 0x%02x", rx_result->pipe, pkt.data_payload[0], pkt.data_payload[1], pkt.data_payload[2]);
     }
 
-    // Data is received per side of the keyboard, with each key represented by a bit. Each side is in row major order.
-    // The keystate buffer is represented in a combined row major order for the whole keyboard.
-    for (size_t i = 0; i < FULL_ROWS; i++)
-    {
-        for (size_t j = 0; j < KEYS_PER_ROW_HALF; j++)
-        {
-            update_keystate(pipe, data_payload, i, j);
-        }
-    }
-    for (size_t j = 0; j < KEYS_FINAL_ROW_HALF; j++)
-    {
-        update_keystate(pipe, data_payload, FULL_ROWS, j);
-    }
+    // Queue the packet for keystate processing in the dedicated thread
+    pkt.pipe = rx_result->pipe;
+    pkt.payload_length = payload_length;
+    k_msgq_put(&keystate_msgq, &pkt, K_NO_WAIT);
 
-    // Load ACK payload into TX queue for the pipe
+    // Load ACK payload into TX queue for the pipe immediately to keep Gazell responsive
     ack_payload[0] = 0xFF; // Arbitrary ACK payload
-    nrf_gzll_add_packet_to_tx_fifo(pipe, ack_payload, TX_PAYLOAD_LENGTH);
+    nrf_gzll_add_packet_to_tx_fifo(rx_result->pipe, ack_payload, TX_PAYLOAD_LENGTH);
 }
 
 /*
@@ -185,9 +221,10 @@ inline the function to avoid function call overhead since this will be called fo
 */
 inline void update_keystate(uint32_t pipe, uint8_t *data_payload, size_t row, size_t column)
 {
-    size_t key_index = row * KEYS_PER_ROW_HALF + column;
+    size_t column_num = (KEYS_PER_ROW_HALF - 1) - column;
+    size_t key_index = row * KEYS_PER_ROW_HALF + column_num;
     size_t byte_index = key_index / 8;
-    size_t bit_index = key_index % 8;
+    size_t bit_index = 7 - (key_index % 8);
 
     // Extract bit value for the key from the received data payload
     bool bit_value = (data_payload[byte_index] >> bit_index) & 1;
@@ -200,8 +237,90 @@ inline void update_keystate(uint32_t pipe, uint8_t *data_payload, size_t row, si
     // Each row takes 2 bytes in the keystate buffer, left half is in even bytes and right half is in odd bytes
     // Find the byte for the key based on row, and set/clear the bit (column) based on the received data
     size_t keystate_index = row * 2 + (pipe == PIPE_NUMBER_LEFT ? 0 : 1); 
-    keystate[keystate_index] &= ~(1 << column); // Clear bit in keystate buffer
-    keystate[keystate_index] |= (bit_value << column); // Set bit in keystate buffer based on received data
+    keystate[keystate_index] &= ~(1 << column_num); // Clear bit in keystate buffer
+    keystate[keystate_index] |= (bit_value << column_num); // Set bit in keystate buffer based on received data
+}
+
+static void gzll_work_handler(struct k_work *work)
+{
+    struct gzll_rx_result rx_result;
+
+    while(!k_msgq_get(&gzll_msgq, &rx_result, K_NO_WAIT)) {
+        fetch_gazell_packet(&rx_result);
+    }
+    k_sem_give(&main_sem);
+}
+
+/*
+Dedicated thread for processing keystate updates from received packets.
+This runs in its own thread to prevent blocking Gazell packet processing.
+*/
+static void keystate_thread_handler(void *p1, void *p2, void *p3)
+{
+    struct keystate_packet packet;
+
+    while (true) {
+        // Wait for a keystate packet to process
+        if (k_msgq_get(&keystate_msgq, &packet, K_FOREVER) == 0) {
+            process_keystate_packet(&packet);
+        }
+    }
+}
+
+static void uart_thread_handler(void *p1, void *p2, void *p3)
+{
+    uint8_t rx_byte;
+    bool uart_initialized = initialize_uart();
+    uint8_t tx_frame[TOTAL_DATA_BYTES + 1] = {0}; // +1 for stop byte
+
+    if (!uart_initialized)
+    {
+        LOG_ERR("Failed to initialize UART");
+        return;
+    }
+    while(true)
+    {
+        if (uart_poll_in(uart_dev, &rx_byte) == 0)
+        {
+            if (rx_byte == 's')
+            {
+                // Send keystates to host in a single frame
+                k_spinlock_key_t key = k_spin_lock(&key_state_lock);
+                memcpy(tx_frame, keystate, TOTAL_DATA_BYTES);
+                k_spin_unlock(&key_state_lock, key);
+                tx_frame[TOTAL_DATA_BYTES] = STOP_BYTE; // Append stop byte to indicate end of frame
+                for (size_t i = 0; i < sizeof(tx_frame); i++)
+                {
+                    uart_poll_out(uart_dev, tx_frame[i]);
+                }
+            }
+        }
+        k_sleep(K_USEC(10));
+    }
+}
+
+/*
+Process a single keystate packet by updating the keystate buffer.
+Data is received per side of the keyboard, with each key represented by a bit. 
+Each side is in row major order. The keystate buffer is represented in a combined 
+row major order for the whole keyboard.
+*/
+static void process_keystate_packet(struct keystate_packet *packet)
+{
+    // LOG_INF("Processing keystate packet");
+    k_spinlock_key_t key = k_spin_lock(&key_state_lock);
+    for (size_t i = 0; i < FULL_ROWS; i++)
+    {
+        for (size_t j = 0; j < KEYS_PER_ROW_HALF; j++)
+        {
+            update_keystate(packet->pipe, packet->data_payload, i, j);
+        }
+    }
+    for (size_t j = 0; j < KEYS_FINAL_ROW_HALF; j++)
+    {
+        update_keystate(packet->pipe, packet->data_payload, FULL_ROWS, j);
+    }
+    k_spin_unlock(&key_state_lock, key);
 }
 
 void nrf_gzll_device_tx_success(uint32_t pipe, nrf_gzll_device_tx_info_t tx_info) {}

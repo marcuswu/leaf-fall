@@ -19,7 +19,7 @@
 &pinctrl {
     uart0_default: uart0_default {
         group1 {
-            /* P0.03 (TX) and P0.04 (RX) */
+            /* P0.09 (TX) and P0.08 (RX) */
             psels = <NRF_PSEL(UART_TX, 0, 9)>,
                     <NRF_PSEL(UART_RX, 0, 8)>;
         };
