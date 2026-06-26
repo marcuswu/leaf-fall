@@ -3,34 +3,34 @@
 
 // All left half keys
 // First row, left to right
-#define L_S00 30
-#define L_S01 29
-#define L_S02 28
-#define L_S03 27
-#define L_S04 26
-#define L_S05 25
+#define L_S00 25
+#define L_S01 26
+#define L_S02 27
+#define L_S03 28
+#define L_S04 29
+#define L_S05 30
 
 // Second row, left to right
-#define L_S06 1
-#define L_S07 0
-#define L_S08 31
-#define L_S09 2
-#define L_S10 3
-#define L_S11 4
+#define L_S06 4
+#define L_S07 3
+#define L_S08 2
+#define L_S09 31
+#define L_S10 0
+#define L_S11 1
 
 // Third row, left to right
-#define L_S12 10
-#define L_S13 9
-#define L_S14 8
-#define L_S15 7
-#define L_S16 6
-#define L_S17 5
+#define L_S12 5
+#define L_S13 6
+#define L_S14 7
+#define L_S15 8
+#define L_S16 9
+#define L_S17 10
 
 // Fourth row, left to right
-#define L_S18 11
-#define L_S19 12
-#define L_S20 13
-#define L_S21 14
+#define L_S18 14
+#define L_S19 13
+#define L_S20 12
+#define L_S21 11
 
 #define L_MASK ((1 << L_S00) | (1 << L_S01) | (1 << L_S02) | (1 << L_S03) | (1 << L_S04) | (1 << L_S05) | \
                 (1 << L_S06) | (1 << L_S07) | (1 << L_S08) | (1 << L_S09) | (1 << L_S10) | (1 << L_S11) | \

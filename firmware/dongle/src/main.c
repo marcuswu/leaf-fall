@@ -221,24 +221,29 @@ inline the function to avoid function call overhead since this will be called fo
 */
 inline void update_keystate(uint32_t pipe, uint8_t *data_payload, size_t row, size_t column)
 {
-    size_t column_num = (KEYS_PER_ROW_HALF - 1) - column;
-    size_t key_index = row * KEYS_PER_ROW_HALF + column_num;
-    size_t byte_index = key_index / 8;
-    size_t bit_index = 7 - (key_index % 8);
+    // in the source data, the 0th column is the most significant bit
+    size_t key_offset = row * KEYS_PER_ROW_HALF + column;
+    size_t byte_index = key_offset / 8;
+    size_t bit_index = 7 - (key_offset % 8); // MSB
+    // size_t column_num = (KEYS_PER_ROW_HALF - 1) - column;
+    // size_t key_index = row * KEYS_PER_ROW_HALF + column_num;
+    // size_t byte_index = key_index / 8;
+    // size_t bit_index = 7 - (key_index % 8);
 
     // Extract bit value for the key from the received data payload
     bool bit_value = (data_payload[byte_index] >> bit_index) & 1;
 
     /*
-    Each row is a byte, and columns are bits within that byte packed to the lower bits of the byte.
+    Each row half is a byte, and columns are bits within that byte packed to the lower bits of the byte.
+    Column 0 is the least significant bit, column 5 is the most significant bit for a half row of 6 keys.
     This leaves some unused bits in each byte which we use to design a termination bit pattern that
     will never appear in actual key data to indicate end of frame to the host.
     */
     // Each row takes 2 bytes in the keystate buffer, left half is in even bytes and right half is in odd bytes
     // Find the byte for the key based on row, and set/clear the bit (column) based on the received data
     size_t keystate_index = row * 2 + (pipe == PIPE_NUMBER_LEFT ? 0 : 1); 
-    keystate[keystate_index] &= ~(1 << column_num); // Clear bit in keystate buffer
-    keystate[keystate_index] |= (bit_value << column_num); // Set bit in keystate buffer based on received data
+    keystate[keystate_index] &= ~(1 << column); // Clear bit in keystate buffer
+    keystate[keystate_index] |= (bit_value << column); // Set bit in keystate buffer based on received data
 }
 
 static void gzll_work_handler(struct k_work *work)
